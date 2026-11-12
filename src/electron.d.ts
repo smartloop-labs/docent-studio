@@ -423,7 +423,7 @@ export interface ElectronAPI {
   slpListModels: (projectId?: string | null) => Promise<{ success: boolean; models?: CatalogModel[]; error?: string }>;
   slpMcpCatalog: () => Promise<{ success: boolean; entries?: any[]; error?: string }>;
   slpInitModel: (modelName: string, projectId?: string | null) => Promise<ModelActionResult>;
-  slpSetModelEnabled: (modelName: string, enabled: boolean, projectId?: string | null) => Promise<ModelActionResult & { downloading?: boolean }>;
+  slpSetModelEnabled: (modelName: string, enabled: boolean, projectId?: string | null, where?: 'cloud' | 'local') => Promise<ModelActionResult & { downloading?: boolean }>;
   slpLoadModel: (modelName: string, projectId?: string | null) => Promise<ModelActionResult & { model?: string; downloading?: boolean }>;
   // No project argument: SLP's cancel route is workspace-level and must stay
   // that way, or the supervisor proxies it to a child with an empty registry.

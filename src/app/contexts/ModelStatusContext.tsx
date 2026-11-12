@@ -47,7 +47,8 @@ export interface ModelStatusValue {
   downloadErrors: Map<string, { message: string; detail?: string; code?: number | null; requiresAuth: boolean }>;
   clearDownloadError: (name: string) => void;
   clearDownloadErrors: () => void;
-  handleToggleModel: (name: string, workspaceName: string, enabled: boolean) => Promise<void>;
+  /** `where` picks cloud or local for a model served both ways; omitted, it runs as registered. */
+  handleToggleModel: (name: string, workspaceName: string, enabled: boolean, where?: 'cloud' | 'local') => Promise<void>;
   handleCancelDownload: (modelName: string) => Promise<void>;
 
   // --- Primary orchestrator model load ---
@@ -356,7 +357,7 @@ export function ModelStatusProvider({ children }: { children: ReactNode }) {
     await api.slpCancelModelDownload(modelName);
   }, []);
 
-  const handleToggleModel = useCallback(async (name: string, workspaceName: string, enabled: boolean) => {
+  const handleToggleModel = useCallback(async (name: string, workspaceName: string, enabled: boolean, where?: 'cloud' | 'local') => {
     const api = window.electronAPI;
     // Guard is per-model: another model downloading must not block this one.
     if (!api?.slpSetModelEnabled || downloadsRef.current.has(name)) return;
@@ -375,7 +376,7 @@ export function ModelStatusProvider({ children }: { children: ReactNode }) {
     // showing progress in that case and let the terminal event finalize it.
     let stillDownloading = false;
     try {
-      const res = await api.slpSetModelEnabled(workspaceName, enabled, projectId);
+      const res = await api.slpSetModelEnabled(workspaceName, enabled, projectId, where);
       stillDownloading = !!res?.downloading;
       // A refused download (400/403 for weights this account can't have) never
       // enables anything, so drop the optimistic override with it — otherwise the

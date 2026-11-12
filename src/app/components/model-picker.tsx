@@ -30,6 +30,7 @@ import {
     isRemote,
     locationTag,
     lockRemedy,
+    runsBothWays,
     matchTitle,
     memoryPressure,
     modelLabel,
@@ -62,6 +63,84 @@ function Tag({ label, color, border, tip, icon }: { label: string; color: string
         </span>
     );
     return tip ? <Tooltip title={tip} arrow placement="top">{tag}</Tooltip> : tag;
+}
+
+/** One half (or the whole) of a row's bring-it-in strip; never toggles the row itself. */
+function StripAction({ icon, label, note, tip, onClick }: { icon: React.ReactNode; label: string; note?: string; tip: string; onClick: () => void }) {
+    return (
+        <Tooltip title={tip} arrow placement="top">
+            <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onClick(); }}
+                className="flex-1 min-w-0 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-sl-border-default bg-transparent text-[11px] font-semibold text-sl-text-secondary whitespace-nowrap cursor-pointer transition-colors hover:border-sl-brand-primary hover:text-sl-brand-primary"
+            >
+                {icon}
+                <span className="truncate">{label}</span>
+                {note && <span className="font-normal text-sl-text-faint truncate">· {note}</span>}
+            </button>
+        </Tooltip>
+    );
+}
+
+/**
+ * How a model can be brought onto this machine or into the cloud: a strip
+ * along the bottom of its card, revealed on hover, in the same place the
+ * download's progress bar then appears — so the action and what it set going
+ * share one spot. "Download · N GB" for any model not on disk; "Use in cloud"
+ * beside it for one served both ways. Only moves that aren't where it runs now
+ * are offered; the location tag says where that is. A both-ways model too
+ * large for this machine offers only the cloud, and says why.
+ */
+function WhereStrip({ cloud, remote, downloaded, fits, gb, onPick }: {
+    /** Served both ways, so the cloud is on offer too; false for a download-only model. */
+    cloud: boolean;
+    remote: boolean;
+    downloaded: boolean;
+    /** The local weights fit this machine's memory. */
+    fits: boolean;
+    gb?: number;
+    onPick: (where: 'cloud' | 'local') => void;
+}) {
+    const local = !remote && downloaded;
+    // Download-only models keep their download even when it looks too big —
+    // there's nowhere else for them to run — and say so in the tooltip.
+    const canDownload = fits || !cloud;
+    const offerCloud = cloud && !remote;
+    const offerDownload = !local && canDownload;
+    if (!offerCloud && !offerDownload) return null;
+    return (
+        // Collapsed to nothing at rest; grows open on hover (or keyboard
+        // focus) of the row, so a long list stays calm and the card only
+        // gains the strip's height while the pointer is on it.
+        <div className="grid grid-rows-[0fr] opacity-0 transition-all duration-150 group-hover:grid-rows-[1fr] group-hover:opacity-100 focus-within:grid-rows-[1fr] focus-within:opacity-100">
+            <div className="overflow-hidden">
+                <div className="mt-2.5 flex items-center gap-2">
+                    {offerCloud && (
+                        <StripAction
+                            icon={<CloudOutlinedIcon sx={{ fontSize: 13 }} />}
+                            label="Use in cloud"
+                            note={offerDownload ? undefined : 'too large to run here'}
+                            tip={fits
+                                ? 'Run in the cloud — on at once, nothing to download. Requests leave this machine.'
+                                : `Too large to run on this machine${gb ? ` (needs ~${gb} GB)` : ''} — run it in the cloud instead.`}
+                            onClick={() => onPick('cloud')}
+                        />
+                    )}
+                    {offerDownload && (
+                        <StripAction
+                            icon={<FileDownloadOutlinedIcon sx={{ fontSize: 13 }} />}
+                            label="Download"
+                            note={gb ? `${gb} GB` : undefined}
+                            tip={fits
+                                ? `Download${gb ? ` (~${gb} GB)` : ''} to run on this machine — requests stay here.`
+                                : `Download${gb ? ` (~${gb} GB)` : ''} — likely too large for this machine's memory to run well.`}
+                            onClick={() => onPick('local')}
+                        />
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 }
 
 /**
@@ -176,6 +255,10 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
     // before it stops being useful. Search matches what a person would actually
     // type — the friendly name, the raw id, the maker, a capability ("vision"),
     // or where it runs ("cloud").
+    // Served both ways, not yet on disk, and too big for this machine's memory.
+    const wontFitLocally = (m: any) =>
+        runsBothWays(m) && !isRemote(m) && !m.downloaded && memoryPressure(m, totalRamGb)?.fits === false;
+
     const groups = useMemo(() => {
         const q = query.trim().toLowerCase();
         const matches = (m: any) => {
@@ -212,11 +295,12 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
             const locked = isLocked(m);
             // A cloud model is either added to the project (on) or not: it has
             // no downloaded-but-off state, because there are no weights to keep.
-            const key = isEnabled(name) ? 'on' : locked ? (lockRemedy(m, signedIn) === 'login' ? 'signin' : 'locked') : isRemote(m) ? 'cloud' : m.downloaded ? 'ready' : 'available';
+            const key = isEnabled(name) ? 'on' : locked ? (lockRemedy(m, signedIn) === 'login' ? 'signin' : 'locked') : isRemote(m) || wontFitLocally(m) ? 'cloud' : m.downloaded ? 'ready' : 'available';
             buckets.find((b) => b.key === key)!.models.push(m);
         }
         return buckets.filter((b) => b.models.length > 0);
-    }, [pickable, query, isEnabled, signedIn]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- wontFitLocally reads only totalRamGb
+    }, [pickable, query, isEnabled, signedIn, totalRamGb]);
 
     const matchCount = groups.reduce((n, g) => n + g.models.length, 0);
 
@@ -257,7 +341,7 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
     // gates it, a download glyph when it isn't on disk yet.
     // A cloud model has no download step — its /v1/init completes at once — so
     // it is just a bulb, like a downloaded local model.
-    const renderState = (st: { name: string; on: boolean; downloaded: boolean; locked: boolean; busy: boolean; isActive: boolean; remote: boolean; needsLogin: boolean }) => {
+    const renderState = (st: { name: string; on: boolean; downloaded: boolean; locked: boolean; busy: boolean; isActive: boolean; remote: boolean; needsLogin: boolean; hasActions?: boolean }) => {
         if (st.busy && st.remote) {
             return (
                 <Tooltip title="Adding…" arrow placement="top">
@@ -320,6 +404,17 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
         }
 
         if (!st.downloaded && !st.remote) {
+            // The strip along the card's bottom brings it in; until then
+            // the bulb is there but can't be lit.
+            if (st.hasActions) {
+                return (
+                    <Tooltip title="Download it (or run it in the cloud) to turn it on" arrow placement="top">
+                        <span className="flex items-center justify-center p-[2px] text-sl-text-disabled opacity-50 cursor-default">
+                            <LightbulbOutlinedIcon sx={{ fontSize: 14 }} />
+                        </span>
+                    </Tooltip>
+                );
+            }
             return (
                 <Tooltip title="Download and turn on this model" arrow placement="top">
                     <span className="flex items-center justify-center p-[2px]" style={{ color: 'var(--sl-brand-primary)' }}>
@@ -376,7 +471,10 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
         // A locked row is inert, except that signing in (or, in the MAS build,
         // upgrading) is one click away, and a locked model that is still on can
         // always be turned off.
-        const clickable = !locked || needsLogin || canUpgrade || on;
+        // Nor is a model that isn't on disk or in the cloud yet: the strip
+        // along its bottom brings it in, and the row has nothing to switch until then.
+        const notHere = !downloaded && !remote && !on && !locked;
+        const clickable = !notHere && (!locked || needsLogin || canUpgrade || on);
         const onRowClick = () => {
             if (!clickable) return;
             if (locked && !on) {
@@ -391,6 +489,13 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
         // Size and memory describe weights on this machine, which a cloud model
         // doesn't have.
         const pressure = remote ? null : memoryPressure(m, totalRamGb);
+        // What the local copy would take, for a cloud-run model's Local switch.
+        const localGb = memoryPressure(m, totalRamGb)?.gb;
+        const localFits = memoryPressure(m, totalRamGb)?.fits !== false;
+        // Strip actions: a both-ways model's Cloud / download, or a download-only
+        // model's download. Hidden mid-transfer (the spinner owns the row then)
+        // and for a plan-gated model that signing in won't open.
+        const hasActions = !busy && !(locked && !needsLogin) && (runsBothWays(m) || (!remote && !downloaded));
         const size = remote ? null : sizeTier(m);
         const context = contextTag(m);
         const tier = tierTag(m);
@@ -402,7 +507,7 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
                 key={name}
                 role="button"
                 onClick={onRowClick}
-                className={`rounded-xl${isActive ? ' model-row-active' : ''}`}
+                className={`group rounded-xl${isActive ? ' model-row-active' : ''}`}
                 sx={{
                     padding: '12px 14px',
                     cursor: clickable ? 'pointer' : 'default',
@@ -447,7 +552,7 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
                     </span>
 
                     <div className="ml-auto flex items-center gap-0.5 flex-shrink-0">
-                        {renderState({ name, on, downloaded, locked, busy, isActive, remote, needsLogin })}
+                        {renderState({ name, on, downloaded, locked, busy, isActive, remote, needsLogin, hasActions })}
                     </div>
                 </div>
 
@@ -505,12 +610,35 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
                     </Tooltip>
                 </Box>
 
+                {/* Bring it in — the strip, then in the same spot the transfer it starts. */}
+                {hasActions && (
+                    <WhereStrip
+                        cloud={runsBothWays(m)}
+                        remote={remote}
+                        downloaded={downloaded}
+                        fits={localFits || downloaded}
+                        gb={localGb}
+                        onPick={(w) => {
+                            if (needsLogin) { setOpen(false); window.dispatchEvent(new CustomEvent('requestSignIn')); return; }
+                            // A download-only model downloads the way it always has.
+                            handleToggleModel(name, m.workspace_name || name, true, runsBothWays(m) ? w : undefined);
+                        }}
+                    />
+                )}
+
                 {busy && !remote && (
-                    <div className="mt-2 flex items-center gap-2">
+                    <div className="mt-2.5 py-1.5 flex items-center gap-2">
                         <span className="flex-1 h-1 rounded-full overflow-hidden block" style={{ backgroundColor: 'var(--sl-white-alpha-7)' }}>
                             <span className="h-full rounded-full block transition-all" style={{ width: `${percent}%`, backgroundColor: 'var(--sl-brand-primary)' }} />
                         </span>
                         <span className="text-[10px] font-mono tabular-nums flex-shrink-0" style={{ color: 'var(--sl-brand-primary)' }}>{percent}%</span>
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleCancelDownload(name); }}
+                            className="flex-shrink-0 px-1.5 py-0.5 rounded border border-sl-border-default bg-transparent text-[10px] font-semibold text-sl-text-faint cursor-pointer transition-colors hover:text-sl-text-secondary"
+                        >
+                            Stop
+                        </button>
                     </div>
                 )}
 

@@ -3040,7 +3040,11 @@ ipcMain.handle('slp-cancel-model-download', async (event, modelName) => {
 // If the model is not downloaded yet, downloads it first (scoped to the project
 // when one is given), then enables it on that project. Falls back to the legacy
 // workspace (app-default) endpoints when no project is supplied.
-ipcMain.handle('slp-set-model-enabled', async (event, modelName, enabled, projectId) => {
+// `where` ('cloud' | 'local') picks how a model the catalog serves both ways
+// runs (its `cloud` and `local` flags): cloud registers the cloud copy through
+// /v1/init with `cloud: true` — nothing to download — and local downloads the
+// weights. Omitted, the model runs the way it's registered, as before.
+ipcMain.handle('slp-set-model-enabled', async (event, modelName, enabled, projectId, where) => {
   const baseUrl = slpService.getLocalBaseUrl();
   if (!baseUrl) return { success: false, error: 'No local service' };
 
@@ -3056,6 +3060,7 @@ ipcMain.handle('slp-set-model-enabled', async (event, modelName, enabled, projec
 
   // Check the model's per-project (or workspace) downloaded state
   let existsInWorkspace = false;
+  let registeredRemote = false;
   try {
     const stateUrl = projectId
       ? `${baseUrl}/v1/projects/${encodeURIComponent(projectId)}/models`
@@ -3067,6 +3072,7 @@ ipcMain.handle('slp-set-model-enabled', async (event, modelName, enabled, projec
       const wsNames = wsList.map(wm => wm.model_name || wm.name);
       const wsMatch = wsList.find(wm => wm.model_name === modelName || wm.name === modelName);
       existsInWorkspace = wsMatch && wsMatch.downloaded;
+      registeredRemote = !!wsMatch && wsMatch.type === 'remote';
       console.log(`[Models] set-model-enabled: looking for "${modelName}" in state: [${wsNames.join(', ')}] → ${existsInWorkspace}`);
     } else {
       console.log(`[Models] set-model-enabled: state fetch failed: HTTP ${wsRes.status}`);
@@ -3075,14 +3081,22 @@ ipcMain.handle('slp-set-model-enabled', async (event, modelName, enabled, projec
     console.log(`[Models] set-model-enabled: state fetch error: ${err.message}`);
   }
 
-  if (!existsInWorkspace && enabled && !alreadyDownloading) {
-    console.log(`[Models] ${modelName} not downloaded, initializing via /v1/init...`);
+  // A requested location the model isn't registered in yet means /v1/init again,
+  // even for a model that's there: it's how cloud ↔ local switches.
+  const wantsCloud = where === 'cloud';
+  const needsInit = where
+    ? !(existsInWorkspace && registeredRemote === wantsCloud)
+    : !existsInWorkspace;
+
+  if (needsInit && enabled && !alreadyDownloading) {
+    console.log(`[Models] ${modelName} ${where ? `→ ${where}` : 'not downloaded'}, initializing via /v1/init...`);
     try {
       const http = require('http');
       const dlUrl = new URL(`${baseUrl}/v1/init`);
-      const postData = JSON.stringify(projectId
-        ? { model_name: modelName, project_id: projectId }
-        : { model_name: modelName });
+      const initBody = { model_name: modelName };
+      if (projectId) initBody.project_id = projectId;
+      if (where) initBody.cloud = wantsCloud;
+      const postData = JSON.stringify(initBody);
       await new Promise((resolve, reject) => {
         const req = http.request({
           hostname: dlUrl.hostname,
@@ -3113,7 +3127,7 @@ ipcMain.handle('slp-set-model-enabled', async (event, modelName, enabled, projec
             reject(err);
           });
         });
-        beginModelDownload(modelName, req, { status: 'Starting download…' });
+        beginModelDownload(modelName, req, { status: wantsCloud ? 'Adding…' : 'Starting download…' });
         req.on('error', (err) => {
           clearActiveDownload(modelName);
           reject(err);
@@ -3714,6 +3728,9 @@ async function fetchModelsWithMerge(projectId) {
       model.downloaded = ws.downloaded === true;
       model.capabilities = ws.capabilities || ws.effective_capabilities || model.capabilities || [];
       model.workspace_name = ws.model_name;
+      // A model served both ways runs the way this workspace registered it
+      // (cloud copy or local weights); the picker's Cloud | Local switch reads it.
+      if (model.cloud && model.local && ws.type) model.type = ws.type;
     } else {
       model.enabled = false;
       model.downloaded = false;

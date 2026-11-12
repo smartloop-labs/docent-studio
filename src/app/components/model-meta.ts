@@ -134,6 +134,13 @@ export function isRemote(m: any): boolean {
     return m.type === 'remote';
 }
 
+// A model the catalog serves both ways — a cloud copy and weights to download —
+// so the user picks where it runs. `cloud` is false when the plan doesn't
+// include the cloud copy, which leaves it local-only.
+export function runsBothWays(m: any): boolean {
+    return m.cloud === true && m.local === true;
+}
+
 // Where the model runs, as a tag. Shown on every row so local and cloud models
 // read apart at a glance.
 export function locationTag(m: any): { label: string; color: string; border: string; tip: string } {
