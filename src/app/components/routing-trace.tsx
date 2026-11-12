@@ -1,4 +1,3 @@
-import { Tooltip } from '@mui/material';
 import {
   buildFlow,
   condenseFlow,
@@ -130,12 +129,13 @@ export function FlowLog({ turn, now }: { turn: TraceTurn; now: number }) {
           const slow = !isTerminal && ms != null && total >= 1000 && ms >= total / 4;
           return (
             <div key={`${n.kind}-${i}-${n.label}`} className="flex flex-col gap-1">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className={`flex items-center flex-shrink-0 ${n.kind === 'model' ? 'text-sl-brand-primary' : failed ? 'text-sl-status-error' : 'text-sl-text-faint'}`}>
+              <div className="flex items-start gap-2 min-w-0">
+                <span className={`flex items-center h-4 flex-shrink-0 ${n.kind === 'model' ? 'text-sl-brand-primary' : failed ? 'text-sl-status-error' : 'text-sl-text-faint'}`}>
                   <NodeGlyph kind={n.kind} />
                 </span>
-                <Tooltip title={n.label} placement="left" arrow>
-                  <span className="text-[11px] flex-1 min-w-0 truncate cursor-default text-sl-text-muted">
+                {/* The whole line, wrapped: a status is a sentence, and cutting
+                    it off hid the half that says what it was doing. */}
+                <span className="text-[11px] leading-4 flex-1 min-w-0 break-words text-sl-text-muted">
                     {n.model ? (
                       <>
                         <span className="font-semibold text-sl-text-secondary">{n.model}</span>
@@ -145,10 +145,9 @@ export function FlowLog({ turn, now }: { turn: TraceTurn; now: number }) {
                       <span className={failed ? 'text-sl-status-error' : isTerminal ? 'text-sl-text-secondary' : ''}>{n.label}</span>
                     )}
                     {n.running ? '…' : ''}
-                  </span>
-                </Tooltip>
+                </span>
                 {ms != null && (isTerminal || ms >= 50 || n.running) && (
-                  <span className={`text-[10px] font-mono tabular-nums flex-shrink-0 ${slow ? 'text-sl-brand-primary' : 'text-sl-text-faint'}`}>
+                  <span className={`text-[10px] leading-4 font-mono tabular-nums flex-shrink-0 ${slow ? 'text-sl-brand-primary' : 'text-sl-text-faint'}`}>
                     {fmtMs(ms)}
                   </span>
                 )}

@@ -66,7 +66,7 @@ function Card({ lead, action, children }: { lead?: React.ReactNode; action?: Rea
       {(lead || action) && (
         /* Identity on the left, its measure on the right. */
         <header className="flex items-baseline justify-between gap-2">
-          <span className="min-w-0 flex-1 truncate">{lead}</span>
+          <span className="min-w-0 flex-1">{lead}</span>
           <span className="flex items-center gap-2 flex-shrink-0">{action}</span>
         </header>
       )}
@@ -142,7 +142,7 @@ export default function LogsPanel({ projectId }: { projectId?: string }) {
       /* The prompt is the run's name: with one card there's no "current"
          to tell apart from anything, so the header says what was asked. */
       lead={(
-        <span className="block truncate text-[12px] font-semibold text-sl-text-secondary" title={latest.prompt || undefined}>
+        <span className="block break-words text-[12px] font-semibold text-sl-text-secondary">
           {latest.prompt?.trim() || 'Untitled run'}
         </span>
       )}
