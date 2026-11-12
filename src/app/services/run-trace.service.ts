@@ -318,10 +318,6 @@ export interface FlowNode {
   at: number;
   ms?: number;
   running?: boolean;
-  /** For a model hop read as "Selected <model> for <purpose>": the model's name… */
-  model?: string;
-  /** …and what it was picked for. */
-  purpose?: string;
 }
 
 /**
@@ -414,61 +410,4 @@ export function buildFlow(turn: TraceTurn, now: number): FlowNode[] {
   }
 
   return nodes;
-}
-
-/* ─── The log as shown ─────────────────────────────────────────────────────
-   buildFlow keeps every line the backend said. Read as a log, half of those
-   say nothing ("Processing...", "Preparing response...", "Tools completed"),
-   and every model choice arrives twice ("Loading model for X…", then
-   "Selected M for X"). These read the flow down to what happened. */
-
-/** Status lines that mark progress without saying what was done. */
-const FILLER = /^(processing|preparing( the)? response|tools completed|response complete|working)$/i;
-const LOADING = /^loading model for (.+)$/i;
-const SELECTED = /^selected\s+(\S+)\s+for\s+(.+)$/i;
-
-/**
- * The hops worth reading: filler dropped (unless it's the hop in flight —
- * that one is the live status), each "Loading model…" folded into the
- * "Selected" that follows it, and a model picked again straight after itself
- * shown once. No prompt node — the panel's header carries the prompt.
- */
-export function condenseFlow(nodes: FlowNode[]): FlowNode[] {
-  const out: FlowNode[] = [];
-  let loading = null as { at: number; ms: number } | null;
-  for (const n of nodes) {
-    if (n.kind === 'prompt') continue;
-    if (!n.running && FILLER.test(n.label)) continue;
-    if (n.kind === 'model' && !n.running && LOADING.test(n.label)) {
-      loading = { at: loading?.at ?? n.at, ms: (loading?.ms ?? 0) + (n.ms ?? 0) };
-      continue;
-    }
-    const sel = n.kind === 'model' ? n.label.match(SELECTED) : null;
-    let node: FlowNode = sel ? { ...n, model: sel[1], purpose: sel[2] } : { ...n };
-    if (loading && node.kind === 'model') {
-      node = { ...node, at: loading.at, ms: (node.ms ?? 0) + loading.ms };
-      loading = null;
-    }
-    const prev = out[out.length - 1];
-    if (prev && node.model && prev.model === node.model) {
-      prev.ms = (prev.ms ?? 0) + (node.ms ?? 0);
-      continue;
-    }
-    out.push(node);
-  }
-  return out;
-}
-
-/** What a run involved, for the line under its title. */
-export function flowSummary(turn: TraceTurn, nodes: FlowNode[]): { models: string[]; skills: number; tools: string[] } {
-  const models = [...new Set(nodes.map((n) => n.model).filter(Boolean) as string[])];
-  let skills = 0;
-  const tools = new Set<string>();
-  for (const s of turn.steps) {
-    const sk = s.message.match(/against\s+(\d+)\s+skills?/i);
-    if (sk) skills = Math.max(skills, Number(sk[1]));
-    const tool = s.message.match(/(?:choosing an?|calling|resolved)\s+([A-Za-z][\w-]*)(?:\.|\s+tool)/i);
-    if (tool) tools.add(tool[1]);
-  }
-  return { models, skills, tools: [...tools] };
 }

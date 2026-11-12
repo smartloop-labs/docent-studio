@@ -1,10 +1,8 @@
 import {
   buildFlow,
-  condenseFlow,
-  flowSummary,
   fmtMs,
+  fmtStamp,
   NodeKind,
-  turnDuration,
   TraceTurn,
 } from '@/app/services/run-trace.service';
 
@@ -13,9 +11,7 @@ import {
  *
  * A turn is a sequence of hops the backend narrates over SSE: the model the
  * orchestrator picked (sometimes several), a document search, a tool,
- * generation. Shown as what was involved (models, skills, tools), then one row
- * per hop that did something, each with a bar placed on the run's timeline —
- * the way a network panel shows where the time went. The chat itself stays
+ * generation. Shown as a plain log of those lines. The chat itself stays
  * clean; the panel is the only place this shows.
  */
 
@@ -77,98 +73,39 @@ export function NodeGlyph({ kind, size = 12 }: { kind: NodeKind; size?: number }
   }
 }
 
-/** An outlined label, per the app's badge style. */
-function Label({ children, brand = false }: { children: React.ReactNode; brand?: boolean }) {
-  return (
-    <span
-      className={`text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase border ${brand ? 'text-sl-brand-primary opacity-70' : 'text-sl-text-faint border-sl-border-default'}`}
-      style={brand ? { borderColor: 'var(--sl-brand-alpha-30)' } : undefined}
-    >
-      {children}
-    </span>
-  );
-}
-
 /**
- * The log itself: what the run involved, then a row per hop with its share of
- * the run's time as a bar on a shared timeline.
- *
- * A bar here is a span on the timeline, not progress toward done: it starts
- * where the hop started and is as long as the hop took, so the long ones —
- * usually choosing a tool and generating — stand out without reading numbers.
- * The hop in flight grows as it runs.
+ * The log itself: every line the backend sent for the run, verbatim, stamped
+ * from the run's start, with how long it lasted — nothing hidden, merged or
+ * summarised. Then how the run ended.
  */
 export function FlowLog({ turn, now }: { turn: TraceTurn; now: number }) {
-  const nodes = condenseFlow(buildFlow(turn, now));
-  const { models, skills, tools } = flowSummary(turn, nodes);
-  const total = Math.max(1, turnDuration(turn, now));
-  const pct = (ms: number) => `${Math.min(100, Math.max(0, (ms / total) * 100))}%`;
-  const hasSummary = models.length > 0 || skills > 0 || tools.length > 0 || !!turn.tokensPerSecond;
+  const nodes = buildFlow(turn, now).filter((n) => n.kind !== 'prompt');
 
   return (
-    <div className="flex flex-col gap-2.5">
-      {hasSummary && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {models.map((m) => <Label key={m} brand>{m}</Label>)}
-          {skills > 0 && <Label>{skills} {skills === 1 ? 'skill' : 'skills'}</Label>}
-          {tools.map((t) => <Label key={t}>{t}</Label>)}
-          {!!turn.tokensPerSecond && (
-            <span className="ml-auto text-[10px] font-mono tabular-nums text-sl-text-faint">
-              {turn.tokensPerSecond.toFixed(0)} tok/s
+    <div className="flex flex-col gap-1">
+      {nodes.map((n, i) => {
+        const isTerminal = n.kind === 'answer' || n.kind === 'halted';
+        const failed = isTerminal && turn.outcome === 'error';
+        const ms = isTerminal ? undefined : n.ms;
+        return (
+          <div key={`${n.kind}-${i}-${n.label}`} className="flex items-start gap-2 min-w-0">
+            <span className="text-[10px] leading-4 font-mono tabular-nums flex-shrink-0 text-sl-text-disabled">
+              +{fmtStamp(n.at)}
             </span>
-          )}
-        </div>
-      )}
-
-      <div className="flex flex-col gap-2">
-        {nodes.map((n, i) => {
-          const isTerminal = n.kind === 'answer' || n.kind === 'halted';
-          const failed = isTerminal && turn.outcome === 'error';
-          const ms = isTerminal ? total : n.ms;
-          // A hop that took a quarter of a run worth timing is where the time went.
-          const slow = !isTerminal && ms != null && total >= 1000 && ms >= total / 4;
-          return (
-            <div key={`${n.kind}-${i}-${n.label}`} className="flex flex-col gap-1">
-              <div className="flex items-start gap-2 min-w-0">
-                <span className={`flex items-center h-4 flex-shrink-0 ${n.kind === 'model' ? 'text-sl-brand-primary' : failed ? 'text-sl-status-error' : 'text-sl-text-faint'}`}>
-                  <NodeGlyph kind={n.kind} />
-                </span>
-                {/* The whole line, wrapped: a status is a sentence, and cutting
-                    it off hid the half that says what it was doing. */}
-                <span className="text-[11px] leading-4 flex-1 min-w-0 break-words text-sl-text-muted">
-                    {n.model ? (
-                      <>
-                        <span className="font-semibold text-sl-text-secondary">{n.model}</span>
-                        <span className="text-sl-text-faint"> for {n.purpose}</span>
-                      </>
-                    ) : (
-                      <span className={failed ? 'text-sl-status-error' : isTerminal ? 'text-sl-text-secondary' : ''}>{n.label}</span>
-                    )}
-                    {n.running ? '…' : ''}
-                </span>
-                {ms != null && (isTerminal || ms >= 50 || n.running) && (
-                  <span className={`text-[10px] leading-4 font-mono tabular-nums flex-shrink-0 ${slow ? 'text-sl-brand-primary' : 'text-sl-text-faint'}`}>
-                    {fmtMs(ms)}
-                  </span>
-                )}
-              </div>
-              {!isTerminal && ms != null && ms >= 50 && (
-                // The hop's span on the run's timeline. Left and width are
-                // the data, so they're the one thing set inline.
-                <div className="relative h-[3px] ml-5 rounded-full overflow-hidden bg-sl-border-subtle">
-                  <span
-                    className={`absolute inset-y-0 rounded-full ${slow ? 'bg-sl-brand-primary' : 'bg-sl-text-disabled'} ${n.running ? 'animate-pulse' : ''}`}
-                    style={{ left: pct(n.at), width: `max(3px, ${pct(ms)})` }}
-                  />
-                </div>
-              )}
-              {n.detail && !isTerminal && (
-                <span className="block text-[10px] ml-5 break-words text-sl-text-faint">{n.detail}</span>
-              )}
-            </div>
-          );
-        })}
-      </div>
+            <span
+              className={`text-[11px] leading-4 flex-1 min-w-0 break-words ${failed ? 'text-sl-status-error' : isTerminal ? 'text-sl-text-secondary' : 'text-sl-text-muted'}`}
+            >
+              {n.label}{n.running ? '…' : ''}
+              {n.detail && <span className="text-sl-text-faint"> · {n.detail}</span>}
+            </span>
+            {ms != null && ms >= 50 && (
+              <span className="text-[10px] leading-4 font-mono tabular-nums flex-shrink-0 text-sl-text-faint">
+                {fmtMs(ms)}
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
