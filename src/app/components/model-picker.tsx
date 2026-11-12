@@ -85,50 +85,42 @@ function CornerAction({ icon, tip, onClick }: { icon: React.ReactNode; tip: stri
 }
 
 /**
- * How a model can be brought onto this machine or into the cloud, as icons in
- * the card's top-right corner — where a connection card keeps its connect
- * button: download for any model not on disk, and cloud for one served both
- * ways. Only moves that aren't where it runs now are offered; the location tag
- * says where that is. A both-ways model too large for this machine offers only
- * the cloud. Once a download starts, the corner's spinner (a stop inside the
- * ring) takes their place and the bar below shows how far it's got.
+ * The other place a model served both ways can run, as a quiet icon beside
+ * the corner's main control: the cloud for one on (or headed for) this
+ * machine, a download for one running in the cloud. The main control — the
+ * download, spinner or bulb — is renderState's; this is the rarer move, so it
+ * stays faint and small rather than sitting beside it at equal weight. Not
+ * offered where it wouldn't make sense: no cloud for a model the corner
+ * already sends there (too big to run here), no download of one too big.
  */
-function WhereActions({ cloud, remote, downloaded, fits, gb, onPick }: {
-    /** Served both ways, so the cloud is on offer too; false for a download-only model. */
-    cloud: boolean;
+function OtherPlace({ remote, notHere, fits, gb, onPick }: {
     remote: boolean;
-    downloaded: boolean;
+    /** Neither on disk nor in the cloud yet — the corner's main control brings it in. */
+    notHere: boolean;
     /** The local weights fit this machine's memory. */
     fits: boolean;
     gb?: number;
     onPick: (where: 'cloud' | 'local') => void;
 }) {
-    const local = !remote && downloaded;
-    // Download-only models keep their download even when it looks too big —
-    // there's nowhere else for them to run — and say so in the tooltip.
-    const canDownload = fits || !cloud;
-    return (
-        <>
-            {cloud && !remote && (
-                <CornerAction
-                    icon={<CloudOutlinedIcon sx={{ fontSize: 14 }} />}
-                    tip={fits
-                        ? 'Run in the cloud — on at once, nothing to download. Requests leave this machine.'
-                        : `Too large to run on this machine${gb ? ` (needs ~${gb} GB)` : ''} — run it in the cloud instead.`}
-                    onClick={() => onPick('cloud')}
-                />
-            )}
-            {!local && canDownload && (
-                <CornerAction
-                    icon={<FileDownloadOutlinedIcon sx={{ fontSize: 14 }} />}
-                    tip={fits
-                        ? `Download${gb ? ` (~${gb} GB)` : ''} to run on this machine — requests stay here.`
-                        : `Download${gb ? ` (~${gb} GB)` : ''} — likely too large for this machine's memory to run well.`}
-                    onClick={() => onPick('local')}
-                />
-            )}
-        </>
-    );
+    if (!remote && !(notHere && !fits)) {
+        return (
+            <CornerAction
+                icon={<CloudOutlinedIcon sx={{ fontSize: 13 }} />}
+                tip="Run in the cloud instead — on at once, nothing to download. Requests leave this machine."
+                onClick={() => onPick('cloud')}
+            />
+        );
+    }
+    if (remote && fits) {
+        return (
+            <CornerAction
+                icon={<FileDownloadOutlinedIcon sx={{ fontSize: 13 }} />}
+                tip={`Download${gb ? ` (~${gb} GB)` : ''} to run on this machine instead — requests stay here.`}
+                onClick={() => onPick('local')}
+            />
+        );
+    }
+    return null;
 }
 
 /**
@@ -325,7 +317,7 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
     // gates it, a download glyph when it isn't on disk yet.
     // A cloud model has no download step — its /v1/init completes at once — so
     // it is just a bulb, like a downloaded local model.
-    const renderState = (st: { name: string; on: boolean; downloaded: boolean; locked: boolean; busy: boolean; isActive: boolean; remote: boolean; needsLogin: boolean; hasActions?: boolean }) => {
+    const renderState = (st: { name: string; on: boolean; downloaded: boolean; locked: boolean; busy: boolean; isActive: boolean; remote: boolean; needsLogin: boolean; bringIn?: { where: 'cloud' | 'local'; gb?: number; go: () => void } }) => {
         if (st.busy && st.remote) {
             return (
                 <Tooltip title="Adding…" arrow placement="top">
@@ -387,14 +379,28 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
             );
         }
 
-        if (!st.downloaded && !st.remote) {
-            // The corner's download (or cloud) icon brings it in; nothing else to show.
-            if (st.hasActions) return null;
+        // Not here yet: the one control downloads it (or, too big for this
+        // machine, adds it in the cloud) and turns it on when that's done —
+        // the way Get becomes Open, with no separate "now enable it" step.
+        if (!st.downloaded && !st.remote && st.bringIn) {
+            const { where, gb, go } = st.bringIn;
             return (
-                <Tooltip title="Download and turn on this model" arrow placement="top">
-                    <span className="flex items-center justify-center p-[2px]" style={{ color: 'var(--sl-brand-primary)' }}>
-                        <FileDownloadOutlinedIcon sx={{ fontSize: 14 }} />
-                    </span>
+                <Tooltip
+                    title={where === 'cloud'
+                        ? `Too large to run on this machine${gb ? ` (needs ~${gb} GB)` : ''} — run it in the cloud and turn it on`
+                        : `Download${gb ? ` (~${gb} GB)` : ''} and turn it on`}
+                    arrow
+                    placement="top"
+                >
+                    <IconButton
+                        size="small"
+                        onClick={(e) => { e.stopPropagation(); go(); }}
+                        sx={{ color: 'var(--sl-brand-primary)', padding: '2px' }}
+                    >
+                        {where === 'cloud'
+                            ? <CloudOutlinedIcon sx={{ fontSize: 14 }} />
+                            : <FileDownloadOutlinedIcon sx={{ fontSize: 14 }} />}
+                    </IconButton>
                 </Tooltip>
             );
         }
@@ -446,12 +452,26 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
         // A locked row is inert, except that signing in (or, in the MAS build,
         // upgrading) is one click away, and a locked model that is still on can
         // always be turned off.
-        // Nor is a model that isn't on disk or in the cloud yet: the icons in
-        // its corner bring it in, and the row has nothing to switch until then.
+        const both = runsBothWays(m);
+        // What the local copy would take, and whether this machine can hold it.
+        const localGb = memoryPressure(m, totalRamGb)?.gb;
+        const localFits = memoryPressure(m, totalRamGb)?.fits !== false;
+        // Brings the model in — downloads it, or adds it in the cloud — and
+        // turns it on once that's done. A download-only model downloads the way
+        // it always has.
+        const bringIn = (w: 'cloud' | 'local') => {
+            if (needsLogin) { setOpen(false); window.dispatchEvent(new CustomEvent('requestSignIn')); return; }
+            handleToggleModel(name, m.workspace_name || name, true, both ? w : undefined);
+        };
+        // Not on disk or in the cloud yet: the corner's one control, and a
+        // click anywhere on the card, bring it in — locally if it fits (or has
+        // nowhere else to run), else in the cloud.
         const notHere = !downloaded && !remote && !on && !locked;
-        const clickable = !notHere && (!locked || needsLogin || canUpgrade || on);
+        const defaultWhere: 'cloud' | 'local' = both && !localFits ? 'cloud' : 'local';
+        const clickable = notHere || !locked || needsLogin || canUpgrade || on;
         const onRowClick = () => {
             if (!clickable) return;
+            if (notHere) return bringIn(defaultWhere);
             if (locked && !on) {
                 setOpen(false);
                 if (needsLogin) window.dispatchEvent(new CustomEvent('requestSignIn'));
@@ -464,13 +484,10 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
         // Size and memory describe weights on this machine, which a cloud model
         // doesn't have.
         const pressure = remote ? null : memoryPressure(m, totalRamGb);
-        // What the local copy would take, for a cloud-run model's Local switch.
-        const localGb = memoryPressure(m, totalRamGb)?.gb;
-        const localFits = memoryPressure(m, totalRamGb)?.fits !== false;
-        // Corner actions: a both-ways model's Cloud / download, or a download-only
-        // model's download. Hidden mid-transfer (the spinner owns the row then)
-        // and for a plan-gated model that signing in won't open.
-        const hasActions = !busy && !(locked && !needsLogin) && (runsBothWays(m) || (!remote && !downloaded));
+        // The other place a both-ways model can run, beside the main control;
+        // hidden mid-transfer (the spinner owns the corner then) and on a
+        // plan-gated row.
+        const showOtherPlace = both && !busy && !locked;
         const size = remote ? null : sizeTier(m);
         const context = contextTag(m);
         const tier = tierTag(m);
@@ -527,21 +544,19 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
                     </span>
 
                     <div className="ml-auto flex items-center gap-0.5 flex-shrink-0">
-                        {hasActions && (
-                            <WhereActions
-                                cloud={runsBothWays(m)}
+                        {showOtherPlace && (
+                            <OtherPlace
                                 remote={remote}
-                                downloaded={downloaded}
-                                fits={localFits || downloaded}
+                                notHere={notHere}
+                                fits={localFits}
                                 gb={localGb}
-                                onPick={(w) => {
-                                    if (needsLogin) { setOpen(false); window.dispatchEvent(new CustomEvent('requestSignIn')); return; }
-                                    // A download-only model downloads the way it always has.
-                                    handleToggleModel(name, m.workspace_name || name, true, runsBothWays(m) ? w : undefined);
-                                }}
+                                onPick={bringIn}
                             />
                         )}
-                        {renderState({ name, on, downloaded, locked, busy, isActive, remote, needsLogin, hasActions })}
+                        {renderState({
+                            name, on, downloaded, locked, busy, isActive, remote, needsLogin,
+                            bringIn: notHere ? { where: defaultWhere, gb: localGb, go: () => bringIn(defaultWhere) } : undefined,
+                        })}
                     </div>
                 </div>
 
