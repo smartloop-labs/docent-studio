@@ -3731,6 +3731,11 @@ async function fetchModelsWithMerge(projectId) {
       // A model served both ways runs the way this workspace registered it
       // (cloud copy or local weights); the picker's Cloud | Local switch reads it.
       if (model.cloud && model.local && ws.type) model.type = ws.type;
+      // Registered as a cloud model, but the catalog doesn't offer it in the
+      // cloud now (logged out, the catalog lists a both-ways model as local
+      // only). SLP reports every cloud registration as downloaded; that says
+      // nothing about weights on this machine, so it isn't on disk.
+      if (ws.type === 'remote' && model.type !== 'remote' && !model.cloud) model.downloaded = false;
     } else {
       model.enabled = false;
       model.downloaded = false;

@@ -388,7 +388,11 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
             const { where, gb, blocked, go } = st.bringIn;
             if (blocked) {
                 return (
-                    <Tooltip title={`Too large to run on this machine${gb ? ` (needs ~${gb} GB)` : ''} — sign in to run it in the cloud`} arrow placement="top">
+                    <Tooltip
+                        title={`Too large to run on this machine${gb ? ` (needs ~${gb} GB)` : ''}.${signedIn ? '' : ' Signing in may let it run in the cloud.'}`}
+                        arrow
+                        placement="top"
+                    >
                         <span className="flex items-center justify-center p-[2px] text-sl-text-disabled opacity-50 cursor-default">
                             <FileDownloadOutlinedIcon sx={{ fontSize: 14 }} />
                         </span>
@@ -447,17 +451,8 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
     // running the full width beneath it rather than indented under the icon.
     // Both lists describe the same kind of thing — a capability you switch on —
     // so they should not be two different shapes.
-    const renderRow = (row: any) => {
-        const name = row.name || row.id || row.model;
-        // A both-ways model the project still has as a cloud model, but the
-        // cloud serves signed-in accounts only: logged out it can't answer, so
-        // it shows as a local model not yet downloaded — a download, or a
-        // disabled one if it won't fit — rather than a bulb that turns on a
-        // model with nowhere to run. One that's on keeps its bulb, so it can
-        // be turned off.
-        const m = runsBothWays(row) && isRemote(row) && !signedIn && !isEnabled(name)
-            ? { ...row, type: 'local', downloaded: false }
-            : row;
+    const renderRow = (m: any) => {
+        const name = m.name || m.id || m.model;
         const downloaded = !!m.downloaded;
         const busy = isDownloading(name);
         const percent = downloads.get(name)?.percent ?? 0;
@@ -487,12 +482,12 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
         // click anywhere on the card, bring it in — locally if it fits (or has
         // nowhere else to run), else in the cloud.
         const notHere = !downloaded && !remote && !on && !locked;
-        // The cloud serves signed-in accounts only. Logged out, a both-ways
-        // model too big for this machine has nowhere to run: its download
-        // shows, disabled, and the card does nothing.
+        // A model too big for this machine runs in the cloud if it's offered
+        // there (signed in, and served both ways). Otherwise it has nowhere
+        // to run: its download shows, disabled, and the card does nothing.
         const cloudOpen = both && signedIn;
         const defaultWhere: 'cloud' | 'local' = cloudOpen && !localFits ? 'cloud' : 'local';
-        const blocked = notHere && both && !localFits && !signedIn;
+        const blocked = notHere && !localFits && !cloudOpen;
         const clickable = (notHere && !blocked) || (!notHere && (!locked || needsLogin || canUpgrade || on));
         const onRowClick = () => {
             if (!clickable) return;
