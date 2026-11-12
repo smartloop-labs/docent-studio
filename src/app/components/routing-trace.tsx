@@ -1,3 +1,4 @@
+import ModelBrandIcon from './model-brand-icon';
 import {
   buildFlow,
   fmtMs,
@@ -78,33 +79,48 @@ export function NodeGlyph({ kind, size = 12 }: { kind: NodeKind; size?: number }
  * from the run's start, with how long it lasted — nothing hidden, merged or
  * summarised. Then how the run ended.
  */
+/** The model a "Selected <model> for …" line names, if it names one. */
+const modelOf = (label: string) => label.match(/^selected\s+(\S+)\s+for\b/i)?.[1];
+
 export function FlowLog({ turn, now }: { turn: TraceTurn; now: number }) {
   const nodes = buildFlow(turn, now).filter((n) => n.kind !== 'prompt');
 
-  // Sized to be read, not scanned: 12px text on a 20px line with air between
-  // entries, the message in readable ink, and the stamp and duration as quiet
-  // fixed columns either side so the eye runs down the words, not the numbers.
+  // Sized to be read, not scanned: 12px text on a 20px line, the message in
+  // readable ink, the stamp and duration as quiet fixed columns either side.
+  // Down the middle, a spine: each line's mark — the model's own logo where a
+  // line names one, else the hop's glyph — joined to the next by a hairline,
+  // so the run reads as one path rather than a list of unrelated lines.
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col">
       {nodes.map((n, i) => {
         const isTerminal = n.kind === 'answer' || n.kind === 'halted';
         const failed = isTerminal && turn.outcome === 'error';
         const ms = isTerminal ? undefined : n.ms;
+        const last = i === nodes.length - 1;
+        const model = n.kind === 'model' ? modelOf(n.label) : undefined;
         return (
-          <div
-            key={`${n.kind}-${i}-${n.label}`}
-            className={`flex items-start gap-3 min-w-0 ${isTerminal ? 'mt-1 pt-2.5 border-t border-sl-border-subtle' : ''}`}
-          >
-            <span className="w-11 text-right text-[10px] leading-5 font-mono tabular-nums flex-shrink-0 text-sl-text-disabled">
+          <div key={`${n.kind}-${i}-${n.label}`} className="flex items-stretch gap-2.5 min-w-0">
+            <span className="w-10 text-right text-[10px] leading-5 font-mono tabular-nums flex-shrink-0 text-sl-text-disabled">
               {fmtStamp(n.at)}
             </span>
+
+            <div className="flex flex-col items-center w-4 flex-shrink-0">
+              <span
+                className={`flex items-center justify-center h-5 ${n.kind === 'model' ? 'text-sl-brand-primary' : failed ? 'text-sl-status-error' : isTerminal ? 'text-sl-text-secondary' : 'text-sl-text-faint'}`}
+              >
+                {model ? <ModelBrandIcon name={model} size={13} /> : <NodeGlyph kind={n.kind} size={13} />}
+              </span>
+              {!last && <span className="flex-1 w-px min-h-2 bg-sl-border" />}
+            </div>
+
             <span
-              className={`text-[12px] leading-5 flex-1 min-w-0 break-words ${failed ? 'text-sl-status-error' : isTerminal ? 'font-medium text-sl-text-primary' : 'text-sl-text-secondary'}`}
+              className={`text-[12px] leading-5 flex-1 min-w-0 break-words ${last ? '' : 'pb-2'} ${failed ? 'text-sl-status-error' : isTerminal ? 'font-medium text-sl-text-primary' : 'text-sl-text-secondary'}`}
             >
               {n.label}{n.running ? '…' : ''}
               {n.detail && <span className="text-sl-text-faint"> · {n.detail}</span>}
             </span>
-            <span className="w-11 text-right text-[10px] leading-5 font-mono tabular-nums flex-shrink-0 text-sl-text-faint">
+
+            <span className="w-10 text-right text-[10px] leading-5 font-mono tabular-nums flex-shrink-0 text-sl-text-faint">
               {ms != null && ms >= 50 ? fmtMs(ms) : ''}
             </span>
           </div>
