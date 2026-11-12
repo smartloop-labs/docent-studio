@@ -139,6 +139,13 @@ export default function LogsPanel({ projectId }: { projectId?: string }) {
 
   return (
     <Card
+      /* Named by where the run is, not what it asked: the log below is
+         about it either way. */
+      lead={(
+        <span className="text-[12px] font-semibold text-sl-text-secondary">
+          {live ? 'Running' : 'Last run'}
+        </span>
+      )}
       action={
         <>
           <span className="text-[10px] font-mono tabular-nums" style={{ color: 'var(--sl-text-faint)' }}>
