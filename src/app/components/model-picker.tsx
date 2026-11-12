@@ -93,20 +93,24 @@ function CornerAction({ icon, tip, onClick }: { icon: React.ReactNode; tip: stri
  * offered where it wouldn't make sense: no cloud for a model the corner
  * already sends there (too big to run here), no download of one too big.
  */
-function OtherPlace({ remote, notHere, fits, gb, onPick }: {
+function OtherPlace({ remote, notHere, fits, gb, signedIn, onPick }: {
     remote: boolean;
     /** Neither on disk nor in the cloud yet — the corner's main control brings it in. */
     notHere: boolean;
     /** The local weights fit this machine's memory. */
     fits: boolean;
     gb?: number;
+    /** The cloud serves signed-in accounts only; logged out, its icon asks for a sign-in. */
+    signedIn: boolean;
     onPick: (where: 'cloud' | 'local') => void;
 }) {
     if (!remote && !(notHere && !fits)) {
         return (
             <CornerAction
                 icon={<CloudOutlinedIcon sx={{ fontSize: 13 }} />}
-                tip="Run in the cloud instead — on at once, nothing to download. Requests leave this machine."
+                tip={signedIn
+                    ? 'Run in the cloud instead — on at once, nothing to download. Requests leave this machine.'
+                    : 'Sign in to run it in the cloud instead'}
                 onClick={() => onPick('cloud')}
             />
         );
@@ -317,7 +321,7 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
     // gates it, a download glyph when it isn't on disk yet.
     // A cloud model has no download step — its /v1/init completes at once — so
     // it is just a bulb, like a downloaded local model.
-    const renderState = (st: { name: string; on: boolean; downloaded: boolean; locked: boolean; busy: boolean; isActive: boolean; remote: boolean; needsLogin: boolean; bringIn?: { where: 'cloud' | 'local'; gb?: number; go: () => void } }) => {
+    const renderState = (st: { name: string; on: boolean; downloaded: boolean; locked: boolean; busy: boolean; isActive: boolean; remote: boolean; needsLogin: boolean; bringIn?: { where: 'cloud' | 'local'; gb?: number; signIn?: boolean; go: () => void } }) => {
         if (st.busy && st.remote) {
             return (
                 <Tooltip title="Adding…" arrow placement="top">
@@ -383,10 +387,12 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
         // machine, adds it in the cloud) and turns it on when that's done —
         // the way Get becomes Open, with no separate "now enable it" step.
         if (!st.downloaded && !st.remote && st.bringIn) {
-            const { where, gb, go } = st.bringIn;
+            const { where, gb, signIn, go } = st.bringIn;
             return (
                 <Tooltip
-                    title={where === 'cloud'
+                    title={signIn
+                        ? `Too large to run on this machine${gb ? ` (needs ~${gb} GB)` : ''} — sign in to run it in the cloud`
+                        : where === 'cloud'
                         ? `Too large to run on this machine${gb ? ` (needs ~${gb} GB)` : ''} — run it in the cloud and turn it on`
                         : `Download${gb ? ` (~${gb} GB)` : ''} and turn it on`}
                     arrow
@@ -460,7 +466,9 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
         // turns it on once that's done. A download-only model downloads the way
         // it always has.
         const bringIn = (w: 'cloud' | 'local') => {
-            if (needsLogin) { setOpen(false); window.dispatchEvent(new CustomEvent('requestSignIn')); return; }
+            // The cloud serves signed-in accounts only: logged out, choosing it
+            // is a sign-in, never a model turned on that can't answer.
+            if (needsLogin || (w === 'cloud' && both && !signedIn)) { setOpen(false); window.dispatchEvent(new CustomEvent('requestSignIn')); return; }
             handleToggleModel(name, m.workspace_name || name, true, both ? w : undefined);
         };
         // Not on disk or in the cloud yet: the corner's one control, and a
@@ -550,12 +558,13 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
                                 notHere={notHere}
                                 fits={localFits}
                                 gb={localGb}
+                                signedIn={signedIn}
                                 onPick={bringIn}
                             />
                         )}
                         {renderState({
                             name, on, downloaded, locked, busy, isActive, remote, needsLogin,
-                            bringIn: notHere ? { where: defaultWhere, gb: localGb, go: () => bringIn(defaultWhere) } : undefined,
+                            bringIn: notHere ? { where: defaultWhere, gb: localGb, signIn: defaultWhere === 'cloud' && !signedIn, go: () => bringIn(defaultWhere) } : undefined,
                         })}
                     </div>
                 </div>
