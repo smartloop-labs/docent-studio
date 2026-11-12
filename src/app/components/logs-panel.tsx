@@ -11,18 +11,15 @@ import { FlowLog } from './routing-trace';
  * events, each line previously overwriting the last in the composer — so the
  * shape of a turn was never visible, only its most recent instant.
  *
- * Laid out as cards rather than a stack of hairline-ruled sections: each card is
- * one question ("what just happened", "what came before"), and a surface with a
- * border makes that grouping visible without a heading shouting it. Runs survive
- * restarts — the store hydrates finished runs from SQLite, so this is a history,
- * not just a session view.
+ * Only the current run — the one in flight, or the one that just finished. A
+ * list of past runs sat under it, but each of those is already a message in the
+ * chat, and the panel's question is "what is it doing now", not an archive.
+ * The run survives a restart (the store hydrates finished runs from SQLite), so
+ * the panel isn't empty after one.
  *
  * Speed deliberately isn't here: tok/s is a machine stat, not routing, and it
  * already has a home in the composer footer.
  */
-
-/** How many past runs the history card lists before it stops. */
-const HISTORY_SHOWN = 6;
 
 /**
  * A log stamp that degrades the way every list of dated things does: the clock
@@ -56,11 +53,7 @@ const relative = (ms: number, now: number): string => {
   return `${Math.round(hours / 24)}d ago`;
 };
 
-/**
- * A card's label — "Current", "Previous". The same 10px uppercase the panel
- * title uses, so the two cards read as the two halves of one list rather than
- * as two unrelated widgets.
- */
+/** The card's label — the same 10px uppercase the panel title uses. */
 function CardLabel({ children }: { children: React.ReactNode }) {
   return (
     <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--sl-text-disabled)' }}>
@@ -80,10 +73,7 @@ function Card({ lead, action, children }: { lead?: React.ReactNode; action?: Rea
       style={{ padding: '12px 14px', border: '1px solid var(--sl-border-subtle)', backgroundColor: 'transparent' }}
     >
       {(lead || action) && (
-        /* No title: the rail already says Activity, and the cards are legible
-           from their content — a log, then a list of past runs. What the header
-           carries is identity on the left and its measure on the right, the same
-           split every row in this panel uses. */
+        /* Identity on the left, its measure on the right. */
         <header className="flex items-baseline justify-between gap-2">
           <span className="min-w-0 truncate">{lead}</span>
           <span className="flex items-center gap-2 flex-shrink-0">{action}</span>
@@ -94,11 +84,8 @@ function Card({ lead, action, children }: { lead?: React.ReactNode; action?: Rea
   );
 }
 
-/**
- * Forget one run. Rows reveal it on hover so a list at rest stays quiet; the
- * current run's copy is always visible, since there is only one of it.
- */
-function ForgetButton({ id, hidden = false }: { id: string; hidden?: boolean }) {
+/** Forget the run shown. */
+function ForgetButton({ id }: { id: string }) {
   return (
     <button
       type="button"
@@ -113,7 +100,6 @@ function ForgetButton({ id, hidden = false }: { id: string; hidden?: boolean }) 
         border: 'none',
         padding: 0,
         color: 'var(--sl-text-disabled)',
-        visibility: hidden ? 'hidden' : 'visible',
       }}
       onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--sl-status-error)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--sl-text-disabled)'; }}
@@ -126,97 +112,6 @@ function ForgetButton({ id, hidden = false }: { id: string; hidden?: boolean }) 
         <path d="M6.8 6.9v4M9.2 6.9v4" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
       </svg>
     </button>
-  );
-}
-
-/** Past runs, each expandable back into its own log. */
-function History({ turns, now }: { turns: TraceTurn[]; now: number }) {
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [hoverId, setHoverId] = useState<string | null>(null);
-  if (turns.length === 0) return null;
-
-  return (
-    <Card lead={<CardLabel>Previous</CardLabel>}>
-      <div className="flex flex-col">
-        {turns.map((t, i) => {
-          const open = openId === t.id;
-          return (
-            <div
-              key={t.id}
-              className={i === 0 ? '' : 'mt-1 pt-1'}
-              style={i === 0 ? undefined : { borderTop: '1px solid var(--sl-border-subtle)' }}
-            >
-              <div
-                className="flex items-center gap-2 rounded-md transition-colors"
-                onMouseEnter={() => setHoverId(t.id)}
-                onMouseLeave={() => setHoverId(null)}
-                style={{ backgroundColor: hoverId === t.id ? 'var(--sl-white-alpha-7)' : 'transparent' }}
-              >
-              <button
-                type="button"
-                onClick={() => setOpenId(open ? null : t.id)}
-                className="flex items-center gap-2 flex-1 min-w-0 text-left rounded-md"
-                style={{ background: 'none', border: 'none', padding: '4px 2px', color: 'inherit' }}
-              >
-                {/* A chevron that flips down/up, not a filled play triangle:
-                    the triangle reads as "run this", and this only opens a row. */}
-                <span
-                  className="inline-flex flex-shrink-0 transition-transform"
-                  style={{ transform: open ? 'rotate(180deg)' : 'none', color: 'var(--sl-text-disabled)' }}
-                >
-                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
-                    <path d="M2.4 3.9L5 6.5l2.6-2.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </span>
-                {/* The prompt leads the row. A monospace clock sat here first —
-                    the way a raw log stream stamps its lines — but this is a
-                    list of runs, not a tail: what identifies a row is what was
-                    asked, so it takes the leading column every other list in
-                    the app gives to a title, and the when trails it. */}
-                <span
-                  className="text-[11px] truncate flex-1 min-w-0"
-                  style={{ color: 'var(--sl-text-secondary)' }}
-                  title={[t.prompt, t.model].filter(Boolean).join('\n\n')}
-                >
-                  {t.prompt?.trim() || t.model || 'Untitled run'}
-                </span>
-                {t.outcome && t.outcome !== 'done' && (
-                  /* Plain word, not a chip — it qualifies the row it sits in
-                     rather than being a badge on it. */
-                  <span
-                    className="text-[10px] flex-shrink-0"
-                    style={{ color: t.outcome === 'error' ? 'var(--sl-status-error)' : 'var(--sl-text-faint)' }}
-                  >
-                    {t.outcome}
-                  </span>
-                )}
-                {/* How long, then when — the trailing metadata pair, faint and
-                    tabular so the column stays a column down the list. */}
-                <span className="text-[10px] font-mono tabular-nums flex-shrink-0" style={{ color: 'var(--sl-text-faint)' }}>
-                  {fmtMs(turnDuration(t, now))}
-                </span>
-                <span
-                  className="text-[10px] font-mono tabular-nums flex-shrink-0"
-                  style={{ color: 'var(--sl-text-disabled)' }}
-                  title={stampTitle(t.startedAt, now)}
-                >
-                  {stamp(t.startedAt)}
-                </span>
-              </button>
-              {/* Kept out of the expanding button so clicking it can't also
-                  toggle the log open. */}
-              <ForgetButton id={t.id} hidden={hoverId !== t.id} />
-              </div>
-              {open && (
-                <div className="pl-3 pb-2 pt-1">
-                  <FlowLog turn={t} now={now} />
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </Card>
   );
 }
 
@@ -239,7 +134,6 @@ export default function LogsPanel({ projectId }: { projectId?: string }) {
   }, [live]);
 
   const latest = turns[0];
-  const earlier = turns.slice(1, 1 + HISTORY_SHOWN);
 
   if (!latest) {
     return (
@@ -253,42 +147,32 @@ export default function LogsPanel({ projectId }: { projectId?: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <Card
-        /* The two cards are labelled by their place in time, not by their
-           content: this one is the run happening (or just happened), the one
-           below is what came before. The prompt doesn't belong in this header —
-           the log under it is already about that one run, so repeating the
-           question here says nothing the card doesn't. It stays the identity of
-           the history rows, where there are many runs to tell apart, and rides
-           along in the hover title here. */
-        lead={(
-          <span title={[latest.prompt, latest.model].filter(Boolean).join('\n\n')}>
-            <CardLabel>Current</CardLabel>
+    <Card
+      /* The prompt rides along in the hover title rather than the header: the
+         log under it is already about that one run, so spelling the question
+         out again says nothing the card doesn't. */
+      lead={(
+        <span title={[latest.prompt, latest.model].filter(Boolean).join('\n\n')}>
+          <CardLabel>Current</CardLabel>
+        </span>
+      )}
+      action={
+        <>
+          <span className="text-[10px] font-mono tabular-nums" style={{ color: 'var(--sl-text-faint)' }}>
+            {fmtMs(turnDuration(latest, now))}
           </span>
-        )}
-        action={
-          <>
-            <span className="text-[10px] font-mono tabular-nums" style={{ color: 'var(--sl-text-faint)' }}>
-              {fmtMs(turnDuration(latest, now))}
-            </span>
-            <span
-              className="text-[10px] font-mono tabular-nums"
-              style={{ color: 'var(--sl-text-disabled)' }}
-              title={live ? 'running now' : stampTitle(latest.startedAt, now)}
-            >
-              {live ? 'now' : stamp(latest.startedAt)}
-            </span>
-            {/* Finished runs can be forgotten from here too, so every run is
-                cleared the same way — one at a time, where it sits. */}
-            {!live && <ForgetButton id={latest.id} />}
-          </>
-        }
-      >
-        <FlowLog turn={latest} now={now} />
-      </Card>
-
-      <History turns={earlier} now={now} />
-    </div>
+          <span
+            className="text-[10px] font-mono tabular-nums"
+            style={{ color: 'var(--sl-text-disabled)' }}
+            title={live ? 'running now' : stampTitle(latest.startedAt, now)}
+          >
+            {live ? 'now' : stamp(latest.startedAt)}
+          </span>
+          {!live && <ForgetButton id={latest.id} />}
+        </>
+      }
+    >
+      <FlowLog turn={latest} now={now} />
+    </Card>
   );
 }
