@@ -53,15 +53,6 @@ const relative = (ms: number, now: number): string => {
   return `${Math.round(hours / 24)}d ago`;
 };
 
-/** The card's label — the same 10px uppercase the panel title uses. */
-function CardLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--sl-text-disabled)' }}>
-      {children}
-    </span>
-  );
-}
-
 /** A panel card: one bordered group, holding one thing. */
 function Card({ lead, action, children }: { lead?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -75,7 +66,7 @@ function Card({ lead, action, children }: { lead?: React.ReactNode; action?: Rea
       {(lead || action) && (
         /* Identity on the left, its measure on the right. */
         <header className="flex items-baseline justify-between gap-2">
-          <span className="min-w-0 truncate">{lead}</span>
+          <span className="min-w-0 flex-1 truncate">{lead}</span>
           <span className="flex items-center gap-2 flex-shrink-0">{action}</span>
         </header>
       )}
@@ -148,12 +139,11 @@ export default function LogsPanel({ projectId }: { projectId?: string }) {
 
   return (
     <Card
-      /* The prompt rides along in the hover title rather than the header: the
-         log under it is already about that one run, so spelling the question
-         out again says nothing the card doesn't. */
+      /* The prompt is the run's name: with one card there's no "current"
+         to tell apart from anything, so the header says what was asked. */
       lead={(
-        <span title={[latest.prompt, latest.model].filter(Boolean).join('\n\n')}>
-          <CardLabel>Current</CardLabel>
+        <span className="block truncate text-[12px] font-semibold text-sl-text-secondary" title={latest.prompt || undefined}>
+          {latest.prompt?.trim() || 'Untitled run'}
         </span>
       )}
       action={

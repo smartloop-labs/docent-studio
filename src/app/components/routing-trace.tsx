@@ -1,9 +1,11 @@
 import { Tooltip } from '@mui/material';
 import {
   buildFlow,
+  condenseFlow,
+  flowSummary,
   fmtMs,
-  fmtStamp,
   NodeKind,
+  turnDuration,
   TraceTurn,
 } from '@/app/services/run-trace.service';
 
@@ -11,9 +13,11 @@ import {
  * The routing log for one turn, as rendered in the Logs panel.
  *
  * A turn is a sequence of hops the backend narrates over SSE: the model the
- * orchestrator picked (sometimes several), a document search, generation. Read
- * as a log, newest at the bottom, stamped relative to the turn's start. The
- * chat itself stays clean — the panel is the only place this shows.
+ * orchestrator picked (sometimes several), a document search, a tool,
+ * generation. Shown as what was involved (models, skills, tools), then one row
+ * per hop that did something, each with a bar placed on the run's timeline —
+ * the way a network panel shows where the time went. The chat itself stays
+ * clean; the panel is the only place this shows.
  */
 
 /** A glyph per hop kind — identity never rests on color alone. */
@@ -74,85 +78,98 @@ export function NodeGlyph({ kind, size = 12 }: { kind: NodeKind; size?: number }
   }
 }
 
+/** An outlined label, per the app's badge style. */
+function Label({ children, brand = false }: { children: React.ReactNode; brand?: boolean }) {
+  return (
+    <span
+      className={`text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase border ${brand ? 'text-sl-brand-primary opacity-70' : 'text-sl-text-faint border-sl-border-default'}`}
+      style={brand ? { borderColor: 'var(--sl-brand-alpha-30)' } : undefined}
+    >
+      {children}
+    </span>
+  );
+}
+
 /**
- * The log itself: a stamped line per hop down a spine.
+ * The log itself: what the run involved, then a row per hop with its share of
+ * the run's time as a bar on a shared timeline.
  *
- * Deliberately no per-hop progress bars. A bar implies a job filling toward
- * completion, and these hops are already finished by the time you read them —
- * the elapsed stamp is the honest encoding.
+ * A bar here is a span on the timeline, not progress toward done: it starts
+ * where the hop started and is as long as the hop took, so the long ones —
+ * usually choosing a tool and generating — stand out without reading numbers.
+ * The hop in flight grows as it runs.
  */
 export function FlowLog({ turn, now }: { turn: TraceTurn; now: number }) {
-  const nodes = buildFlow(turn, now);
+  const nodes = condenseFlow(buildFlow(turn, now));
+  const { models, skills, tools } = flowSummary(turn, nodes);
+  const total = Math.max(1, turnDuration(turn, now));
+  const pct = (ms: number) => `${Math.min(100, Math.max(0, (ms / total) * 100))}%`;
+  const hasSummary = models.length > 0 || skills > 0 || tools.length > 0 || !!turn.tokensPerSecond;
 
   return (
-    <div className="flex flex-col">
-      {nodes.map((n, i) => {
-        const isModel = n.kind === 'model';
-        const isTerminal = n.kind === 'answer' || n.kind === 'halted';
-        const accent = isModel
-          ? 'var(--sl-brand-primary)'
-          : isTerminal && turn.outcome === 'error'
-            ? 'var(--sl-status-error)'
-            : 'var(--sl-text-muted)';
-        const last = i === nodes.length - 1;
-        return (
-          <div key={`${n.kind}-${i}-${n.label}`} className="flex gap-2">
-            {/* Spine: the glyph marks this hop, the line carries to the next. */}
-            <div className="flex flex-col items-center flex-shrink-0" style={{ width: 12 }}>
-              <span className="flex items-center justify-center" style={{ color: accent, height: 16 }}>
-                <NodeGlyph kind={n.kind} />
-              </span>
-              {!last && (
-                <span
-                  className="flex-1 w-px my-0.5"
-                  style={{ backgroundColor: 'var(--sl-border-default)', minHeight: 10 }}
-                />
-              )}
-            </div>
+    <div className="flex flex-col gap-2.5">
+      {hasSummary && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {models.map((m) => <Label key={m} brand>{m}</Label>)}
+          {skills > 0 && <Label>{skills} {skills === 1 ? 'skill' : 'skills'}</Label>}
+          {tools.map((t) => <Label key={t}>{t}</Label>)}
+          {!!turn.tokensPerSecond && (
+            <span className="ml-auto text-[10px] font-mono tabular-nums text-sl-text-faint">
+              {turn.tokensPerSecond.toFixed(0)} tok/s
+            </span>
+          )}
+        </div>
+      )}
 
-            <div className={`flex-1 min-w-0 ${last ? '' : 'pb-1.5'}`}>
-              <div className="flex items-baseline gap-1.5">
-                {/* The stamp: mono and tabular so the column reads as a column. */}
-                <span
-                  className="text-[10px] font-mono tabular-nums flex-shrink-0"
-                  style={{ color: 'var(--sl-text-disabled)' }}
-                >
-                  +{fmtStamp(n.at)}
+      <div className="flex flex-col gap-2">
+        {nodes.map((n, i) => {
+          const isTerminal = n.kind === 'answer' || n.kind === 'halted';
+          const failed = isTerminal && turn.outcome === 'error';
+          const ms = isTerminal ? total : n.ms;
+          // A hop that took a quarter of a run worth timing is where the time went.
+          const slow = !isTerminal && ms != null && total >= 1000 && ms >= total / 4;
+          return (
+            <div key={`${n.kind}-${i}-${n.label}`} className="flex flex-col gap-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`flex items-center flex-shrink-0 ${n.kind === 'model' ? 'text-sl-brand-primary' : failed ? 'text-sl-status-error' : 'text-sl-text-faint'}`}>
+                  <NodeGlyph kind={n.kind} />
                 </span>
-                <Tooltip title={n.ms != null ? `${n.label} — took ${fmtMs(n.ms)}` : n.label} placement="left" arrow>
-                  {/* Wraps rather than clipping: the panel is ~300px wide and a
-                      backend status line is a sentence, so truncating hid the
-                      half that says what it was doing. */}
-                  <span
-                    className="text-[11px] cursor-default flex-1 min-w-0 break-words"
-                    style={{ color: 'var(--sl-text-muted)' }}
-                  >
-                    {/* Verbatim from the server, and no emphasis on model rows:
-                        the glyph in the spine already says which kind of hop this
-                        is, so re-saying it in ink weight was the same fact twice.
-                        An open hop trails an ellipsis — the "still going" signal
-                        the backend's own status text uses. */}
-                    {n.label}{n.running ? '…' : ''}
+                <Tooltip title={n.label} placement="left" arrow>
+                  <span className="text-[11px] flex-1 min-w-0 truncate cursor-default text-sl-text-muted">
+                    {n.model ? (
+                      <>
+                        <span className="font-semibold text-sl-text-secondary">{n.model}</span>
+                        <span className="text-sl-text-faint"> for {n.purpose}</span>
+                      </>
+                    ) : (
+                      <span className={failed ? 'text-sl-status-error' : isTerminal ? 'text-sl-text-secondary' : ''}>{n.label}</span>
+                    )}
+                    {n.running ? '…' : ''}
                   </span>
                 </Tooltip>
-                {n.ms != null && n.ms >= 50 && !isTerminal && (
-                  <span className="text-[10px] font-mono tabular-nums flex-shrink-0" style={{ color: 'var(--sl-text-faint)' }}>
-                    {fmtMs(n.ms)}
+                {ms != null && (isTerminal || ms >= 50 || n.running) && (
+                  <span className={`text-[10px] font-mono tabular-nums flex-shrink-0 ${slow ? 'text-sl-brand-primary' : 'text-sl-text-faint'}`}>
+                    {fmtMs(ms)}
                   </span>
                 )}
               </div>
-
-              {n.detail && (
-                /* Nested under its line, log-style, so it reads as belonging to
-                   the hop above rather than as another event. */
-                <span className="block text-[10px] pl-[34px] break-words" style={{ color: 'var(--sl-text-faint)' }}>
-                  └ {n.detail}
-                </span>
+              {!isTerminal && ms != null && ms >= 50 && (
+                // The hop's span on the run's timeline. Left and width are
+                // the data, so they're the one thing set inline.
+                <div className="relative h-[3px] ml-5 rounded-full overflow-hidden bg-sl-border-subtle">
+                  <span
+                    className={`absolute inset-y-0 rounded-full ${slow ? 'bg-sl-brand-primary' : 'bg-sl-text-disabled'} ${n.running ? 'animate-pulse' : ''}`}
+                    style={{ left: pct(n.at), width: `max(3px, ${pct(ms)})` }}
+                  />
+                </div>
+              )}
+              {n.detail && !isTerminal && (
+                <span className="block text-[10px] ml-5 break-words text-sl-text-faint">{n.detail}</span>
               )}
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
