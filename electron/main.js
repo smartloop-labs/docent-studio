@@ -3469,6 +3469,10 @@ const FOCUS_AUTH_INTERVAL_MS = 60_000;
 let loginWait = null;
 
 function sendLoginState(payload) {
+  // Signing in changes the catalog (cloud models, both-ways models offered in
+  // the cloud), whoever signs in — not only a different account — so the
+  // cached lists go before the renderer hears and refetches.
+  if (payload?.state === 'success') invalidateModelsCache();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('login-state', payload);
   }
@@ -3750,12 +3754,22 @@ async function fetchModelsWithMerge(projectId) {
 let modelsCache = new Map(); // projectId -> { data, timestamp }
 let modelsRefreshPromises = new Map(); // projectId -> in-flight refresh
 const MODELS_FRESH_TTL_MS = 30_000;
+// Bumped by every invalidation. A refresh that started before one read the
+// catalog as it was then (signed out, say), so its answer is neither cached
+// nor sent — it fetches again instead — and callers after the invalidation
+// don't join it.
+let modelsGeneration = 0;
 
 function refreshModelsCache(projectId) {
   if (modelsRefreshPromises.has(projectId)) return modelsRefreshPromises.get(projectId);
+  const generation = modelsGeneration;
   const promise = (async () => {
     try {
       const models = await fetchModelsWithMerge(projectId);
+      if (generation !== modelsGeneration) {
+        if (modelsRefreshPromises.get(projectId) === promise) modelsRefreshPromises.delete(projectId);
+        return refreshModelsCache(projectId);
+      }
       if (models) {
         modelsCache.set(projectId, { data: models, timestamp: Date.now() });
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -3764,7 +3778,7 @@ function refreshModelsCache(projectId) {
       }
       return models;
     } finally {
-      modelsRefreshPromises.delete(projectId);
+      if (modelsRefreshPromises.get(projectId) === promise) modelsRefreshPromises.delete(projectId);
     }
   })();
   modelsRefreshPromises.set(projectId, promise);
@@ -3772,7 +3786,9 @@ function refreshModelsCache(projectId) {
 }
 
 function invalidateModelsCache(projectId) {
+  modelsGeneration++;
   if (projectId === undefined) {
+    modelsRefreshPromises = new Map();
     modelsCache = new Map();
   } else {
     modelsCache.delete(projectId);
