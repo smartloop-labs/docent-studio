@@ -447,8 +447,17 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
     // running the full width beneath it rather than indented under the icon.
     // Both lists describe the same kind of thing — a capability you switch on —
     // so they should not be two different shapes.
-    const renderRow = (m: any) => {
-        const name = m.name || m.id || m.model;
+    const renderRow = (row: any) => {
+        const name = row.name || row.id || row.model;
+        // A both-ways model the project still has as a cloud model, but the
+        // cloud serves signed-in accounts only: logged out it can't answer, so
+        // it shows as a local model not yet downloaded — a download, or a
+        // disabled one if it won't fit — rather than a bulb that turns on a
+        // model with nowhere to run. One that's on keeps its bulb, so it can
+        // be turned off.
+        const m = runsBothWays(row) && isRemote(row) && !signedIn && !isEnabled(name)
+            ? { ...row, type: 'local', downloaded: false }
+            : row;
         const downloaded = !!m.downloaded;
         const busy = isDownloading(name);
         const percent = downloads.get(name)?.percent ?? 0;
