@@ -81,28 +81,32 @@ export function NodeGlyph({ kind, size = 12 }: { kind: NodeKind; size?: number }
 export function FlowLog({ turn, now }: { turn: TraceTurn; now: number }) {
   const nodes = buildFlow(turn, now).filter((n) => n.kind !== 'prompt');
 
+  // Sized to be read, not scanned: 12px text on a 20px line with air between
+  // entries, the message in readable ink, and the stamp and duration as quiet
+  // fixed columns either side so the eye runs down the words, not the numbers.
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-2">
       {nodes.map((n, i) => {
         const isTerminal = n.kind === 'answer' || n.kind === 'halted';
         const failed = isTerminal && turn.outcome === 'error';
         const ms = isTerminal ? undefined : n.ms;
         return (
-          <div key={`${n.kind}-${i}-${n.label}`} className="flex items-start gap-2 min-w-0">
-            <span className="text-[10px] leading-4 font-mono tabular-nums flex-shrink-0 text-sl-text-disabled">
-              +{fmtStamp(n.at)}
+          <div
+            key={`${n.kind}-${i}-${n.label}`}
+            className={`flex items-start gap-3 min-w-0 ${isTerminal ? 'mt-1 pt-2.5 border-t border-sl-border-subtle' : ''}`}
+          >
+            <span className="w-11 text-right text-[10px] leading-5 font-mono tabular-nums flex-shrink-0 text-sl-text-disabled">
+              {fmtStamp(n.at)}
             </span>
             <span
-              className={`text-[11px] leading-4 flex-1 min-w-0 break-words ${failed ? 'text-sl-status-error' : isTerminal ? 'text-sl-text-secondary' : 'text-sl-text-muted'}`}
+              className={`text-[12px] leading-5 flex-1 min-w-0 break-words ${failed ? 'text-sl-status-error' : isTerminal ? 'font-medium text-sl-text-primary' : 'text-sl-text-secondary'}`}
             >
               {n.label}{n.running ? '…' : ''}
               {n.detail && <span className="text-sl-text-faint"> · {n.detail}</span>}
             </span>
-            {ms != null && ms >= 50 && (
-              <span className="text-[10px] leading-4 font-mono tabular-nums flex-shrink-0 text-sl-text-faint">
-                {fmtMs(ms)}
-              </span>
-            )}
+            <span className="w-11 text-right text-[10px] leading-5 font-mono tabular-nums flex-shrink-0 text-sl-text-faint">
+              {ms != null && ms >= 50 ? fmtMs(ms) : ''}
+            </span>
           </div>
         );
       })}
