@@ -139,13 +139,6 @@ export default function LogsPanel({ projectId }: { projectId?: string }) {
 
   return (
     <Card
-      /* The prompt is the run's name: with one card there's no "current"
-         to tell apart from anything, so the header says what was asked. */
-      lead={(
-        <span className="block break-words text-[12px] font-semibold text-sl-text-secondary">
-          {latest.prompt?.trim() || 'Untitled run'}
-        </span>
-      )}
       action={
         <>
           <span className="text-[10px] font-mono tabular-nums" style={{ color: 'var(--sl-text-faint)' }}>
