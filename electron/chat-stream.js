@@ -758,12 +758,165 @@ function send(input) {
   };
 }
 
+// The framework no longer saves skills itself — that belongs to the app on top
+// (as it does for docent). So a prompt that asks for one carries this hint: the
+// reply drafts the skill as a SKILL.md heredoc, and when the turn ends the
+// renderer parses it and creates it through the same skills API the "/" command
+// uses (see src/app/utils/skill-draft.ts).
+//
+// A skill is a task saved under a name: `/<name>` later does the job again
+// without it being asked for in full. The wording is plain and concrete, with
+// a filled-in example, because a small local model copies placeholders like
+// `<name>` literally and reads "prompt" as the subject of the skill.
+const SKILL_PURPOSE = "A skill is a task saved under a short name, so that when I type `/name` later you do "
+  + "that task again. Write the skill as the steps for doing the task: what to do, what to use, and how to lay "
+  + "out the result. Don't write the result itself. Leave out the values that change each time (a date, a "
+  + "person, a topic, a file): I'll give those when I run it.";
+
+const SKILL_FORMAT = "Reply with one line saying what the skill does, then the skill in exactly this shape, "
+  + "choosing its own name (2-4 lowercase words joined by hyphens) and using it in both places. For example, a "
+  + "different skill named weekly-report looks like this:\n\n"
+  + "```sh\n"
+  + "cat > skills/weekly-report/SKILL.md <<'EOF'\n"
+  + "---\n"
+  + "name: weekly-report\n"
+  + "description: Use when I ask for my weekly report.\n"
+  + "---\n\n"
+  + "1. Collect what I finished this week from the tasks I give you.\n"
+  + "2. Group them by project.\n"
+  + "3. Reply with a heading per project and one bullet per task.\n"
+  + "EOF\n"
+  + "```\n\n"
+  + "If the skill's text has a line of three backticks, open and close the block with four. The skill is saved "
+  + "for me from that block, so don't tell me to create it by hand.";
+
+// Enough of the earlier turn for the model to see what to capture, without the
+// hint crowding out a small model's context.
+const PRIOR_PROMPT_CHARS = 2000;
+const PRIOR_ANSWER_CHARS = 4000;
+
+/** Whether a prompt asks for a skill to be made, changed or saved. */
+function wantsSkill(text) {
+  const t = String(text || '').toLowerCase();
+  if (!/\bskills?\b/.test(t)) return false;
+  return /\b(create|make|write|save|add|build|draft|new|turn|convert)\b/.test(t) || isSkillUpdate(t);
+}
+
+const clip = (text, max) => {
+  const s = String(text || '').trim();
+  return s.length > max ? `${s.slice(0, max)}\n…` : s;
+};
+
+/**
+ * The last request in this conversation before `input`'s, and its answer —
+ * what "create a skill based on this" refers to. Skips earlier skill requests,
+ * so asking twice still points at the real task. Null in a new conversation.
+ */
+function priorTurn(input) {
+  let rows = [];
+  try { rows = deps.database.getMessages(input.conversationId) || []; } catch { return null; }
+  rows = rows.filter((m) => m.id !== input.userMessageId);
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const m = rows[i];
+    if (m.role !== 'user' || !m.content || wantsSkill(m.content)) continue;
+    const answer = rows.slice(i + 1).find((r) => r.role === 'assistant' && r.content);
+    return answer ? { prompt: m.content, answer: answer.content } : null;
+  }
+  return null;
+}
+
+/**
+ * Whether a skill request changes an existing skill rather than making one.
+ * Mirrors isSkillUpdate in src/app/utils/skill-draft.ts — keep them in step.
+ */
+function isSkillUpdate(text) {
+  const t = String(text || '').toLowerCase();
+  if (!/\bskills?\b/.test(t)) return false;
+  if (/\b(update|edit|change|improve|modify|fix|tweak|adjust|revise|rename)\b/.test(t)) return true;
+  return /\b(the|this|that|my)\s+skill\b/.test(t) && !/\b(create|make|new|another|save|turn|convert)\b/.test(t);
+}
+
+// `cat > path <<'EOF'` — the same shape skill-draft.ts parses.
+const HEREDOC_START = /^\s*cat\s*>\s*["']?([^\s"']+)["']?\s*<<-?\s*(['"]?)([A-Za-z_][\w-]*)\2\s*$/;
+
+/**
+ * The skill most recently drafted in this conversation, as `{ name, content }`
+ * — what "update the skill" refers to. Null when none was.
+ */
+function lastDraftedSkill(rows) {
+  for (let r = rows.length - 1; r >= 0; r--) {
+    if (rows[r].role !== 'assistant' || !rows[r].content) continue;
+    const lines = String(rows[r].content).split(/\r?\n/);
+    let found = null;
+    for (let i = 0; i < lines.length; i++) {
+      const start = lines[i].match(HEREDOC_START);
+      const path = start && start[1].replace(/\\/g, '/');
+      const pathName = path && ((path.match(/(?:^|\/)skills\/([^/]+)\/SKILL\.md$/i) || [])[1]
+        || (path.match(/(?:^|\/)skills\/([^/]+)\.md$/i) || [])[1]);
+      if (!pathName) continue;
+      const body = [];
+      let j = i + 1;
+      for (; j < lines.length && lines[j].trim() !== start[3]; j++) body.push(lines[j]);
+      if (j >= lines.length) continue;
+      i = j;
+      const content = body.join('\n').trim();
+      const fmName = ((content.match(/^---\s*\n([\s\S]*?)\n---/) || [])[1] || '')
+        .split('\n').find((l) => /^name\s*:/i.test(l));
+      // Same order as skillName in skill-draft.ts: frontmatter, path, first heading.
+      const slug = (t) => String(t || '').trim().toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, ' ').trim().split(/[\s-]+/).filter(Boolean).slice(0, 5).join('-');
+      const real = (t) => (t && !/[<>]/.test(t) ? slug(t) : '');
+      const heading = content.split('\n').find((l) => /^#{1,3}\s+\S/.test(l));
+      const name = real(fmName && fmName.replace(/^name\s*:/i, '').trim().replace(/^["']|["']$/g, ''))
+        || real(pathName)
+        || (heading ? slug(heading.replace(/^#+\s*/, '').replace(/^skill\s*:\s*/i, '')) : '')
+        || 'new-skill';
+      if (name && content) found = { name, content };
+    }
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Whether a skill request points at the conversation so far rather than describing the task. */
+function refersBack(text) {
+  return /\b(this|that|it|above|output|answer|result|response|conversation|chat|based)\b/i.test(String(text || ''));
+}
+
+/** The hint a skill request carries: what the skill is for, its source turn, and its format. */
+function skillHint(input) {
+  if (isSkillUpdate(input.text)) {
+    let rows = [];
+    try { rows = (deps.database.getMessages(input.conversationId) || []).filter((m) => m.id !== input.userMessageId); } catch { /* none */ }
+    const skill = lastDraftedSkill(rows);
+    if (skill) {
+      return `Update the skill \`${skill.name}\` below with the change I've asked for, rather than making a new one. `
+        + `Keep its name \`${skill.name}\` exactly, keep everything I haven't asked to change, and give the whole `
+        + `updated SKILL.md, not only what changed.\n\nThe skill now:\n"""\n${clip(skill.content, PRIOR_ANSWER_CHARS)}\n"""\n\n`
+        + `Reply with one line saying what changed, then the whole skill in a fenced block marked \`sh\`, as `
+        + `before: a line \`cat > skills/${skill.name}/SKILL.md <<'EOF'\`, the SKILL.md with \`name: ${skill.name}\` `
+        + `in its frontmatter, then \`EOF\` alone on its line. If the skill's text has a line of three backticks, `
+        + `open and close the block with four. It's saved for me from that block.`;
+    }
+  }
+  // "create a skill based on this" points at the earlier turn; "create a skill
+  // that lists my Linear issues" describes the task itself.
+  const prior = refersBack(input.text) ? priorTurn(input) : null;
+  const source = prior
+    ? "Make the skill from this request and its answer, earlier in our conversation:\n\n"
+      + `Request:\n"""\n${clip(prior.prompt, PRIOR_PROMPT_CHARS)}\n"""\n\n`
+      + `Answer:\n"""\n${clip(prior.answer, PRIOR_ANSWER_CHARS)}\n"""`
+    : "Make the skill for the task I've described above.";
+  return `${SKILL_PURPOSE}\n\n${source}\n\n${SKILL_FORMAT}`;
+}
+
 // Built here rather than in the renderer because a retry has to rebuild it with
 // no renderer necessarily alive to ask.
 function buildRequestBody(input) {
   const message = {
     role: 'user',
-    content: input.text,
+    // Only the request carries the hint; the stored user message stays as typed.
+    content: wantsSkill(input.text) ? `${input.text}\n\n${skillHint(input)}` : input.text,
     additional_message_params: {
       tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
       locale: deps.getLocale ? deps.getLocale() : 'en-US',

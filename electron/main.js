@@ -3040,7 +3040,11 @@ ipcMain.handle('slp-cancel-model-download', async (event, modelName) => {
 // If the model is not downloaded yet, downloads it first (scoped to the project
 // when one is given), then enables it on that project. Falls back to the legacy
 // workspace (app-default) endpoints when no project is supplied.
-ipcMain.handle('slp-set-model-enabled', async (event, modelName, enabled, projectId) => {
+// `where` ('cloud' | 'local') picks how a model the catalog serves both ways
+// runs (its `cloud` and `local` flags): cloud registers the cloud copy through
+// /v1/init with `cloud: true` — nothing to download — and local downloads the
+// weights. Omitted, the model runs the way it's registered, as before.
+ipcMain.handle('slp-set-model-enabled', async (event, modelName, enabled, projectId, where) => {
   const baseUrl = slpService.getLocalBaseUrl();
   if (!baseUrl) return { success: false, error: 'No local service' };
 
@@ -3056,6 +3060,7 @@ ipcMain.handle('slp-set-model-enabled', async (event, modelName, enabled, projec
 
   // Check the model's per-project (or workspace) downloaded state
   let existsInWorkspace = false;
+  let registeredRemote = false;
   try {
     const stateUrl = projectId
       ? `${baseUrl}/v1/projects/${encodeURIComponent(projectId)}/models`
@@ -3067,6 +3072,7 @@ ipcMain.handle('slp-set-model-enabled', async (event, modelName, enabled, projec
       const wsNames = wsList.map(wm => wm.model_name || wm.name);
       const wsMatch = wsList.find(wm => wm.model_name === modelName || wm.name === modelName);
       existsInWorkspace = wsMatch && wsMatch.downloaded;
+      registeredRemote = !!wsMatch && wsMatch.type === 'remote';
       console.log(`[Models] set-model-enabled: looking for "${modelName}" in state: [${wsNames.join(', ')}] → ${existsInWorkspace}`);
     } else {
       console.log(`[Models] set-model-enabled: state fetch failed: HTTP ${wsRes.status}`);
@@ -3075,14 +3081,22 @@ ipcMain.handle('slp-set-model-enabled', async (event, modelName, enabled, projec
     console.log(`[Models] set-model-enabled: state fetch error: ${err.message}`);
   }
 
-  if (!existsInWorkspace && enabled && !alreadyDownloading) {
-    console.log(`[Models] ${modelName} not downloaded, initializing via /v1/init...`);
+  // A requested location the model isn't registered in yet means /v1/init again,
+  // even for a model that's there: it's how cloud ↔ local switches.
+  const wantsCloud = where === 'cloud';
+  const needsInit = where
+    ? !(existsInWorkspace && registeredRemote === wantsCloud)
+    : !existsInWorkspace;
+
+  if (needsInit && enabled && !alreadyDownloading) {
+    console.log(`[Models] ${modelName} ${where ? `→ ${where}` : 'not downloaded'}, initializing via /v1/init...`);
     try {
       const http = require('http');
       const dlUrl = new URL(`${baseUrl}/v1/init`);
-      const postData = JSON.stringify(projectId
-        ? { model_name: modelName, project_id: projectId }
-        : { model_name: modelName });
+      const initBody = { model_name: modelName };
+      if (projectId) initBody.project_id = projectId;
+      if (where) initBody.cloud = wantsCloud;
+      const postData = JSON.stringify(initBody);
       await new Promise((resolve, reject) => {
         const req = http.request({
           hostname: dlUrl.hostname,
@@ -3113,7 +3127,7 @@ ipcMain.handle('slp-set-model-enabled', async (event, modelName, enabled, projec
             reject(err);
           });
         });
-        beginModelDownload(modelName, req, { status: 'Starting download…' });
+        beginModelDownload(modelName, req, { status: wantsCloud ? 'Adding…' : 'Starting download…' });
         req.on('error', (err) => {
           clearActiveDownload(modelName);
           reject(err);
@@ -3455,6 +3469,10 @@ const FOCUS_AUTH_INTERVAL_MS = 60_000;
 let loginWait = null;
 
 function sendLoginState(payload) {
+  // Signing in changes the catalog (cloud models, both-ways models offered in
+  // the cloud), whoever signs in — not only a different account — so the
+  // cached lists go before the renderer hears and refetches.
+  if (payload?.state === 'success') invalidateModelsCache();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('login-state', payload);
   }
@@ -3714,6 +3732,14 @@ async function fetchModelsWithMerge(projectId) {
       model.downloaded = ws.downloaded === true;
       model.capabilities = ws.capabilities || ws.effective_capabilities || model.capabilities || [];
       model.workspace_name = ws.model_name;
+      // A model served both ways runs the way this workspace registered it
+      // (cloud copy or local weights); the picker's Cloud | Local switch reads it.
+      if (model.cloud && model.local && ws.type) model.type = ws.type;
+      // Registered as a cloud model, but the catalog doesn't offer it in the
+      // cloud now (logged out, the catalog lists a both-ways model as local
+      // only). SLP reports every cloud registration as downloaded; that says
+      // nothing about weights on this machine, so it isn't on disk.
+      if (ws.type === 'remote' && model.type !== 'remote' && !model.cloud) model.downloaded = false;
     } else {
       model.enabled = false;
       model.downloaded = false;
@@ -3728,12 +3754,22 @@ async function fetchModelsWithMerge(projectId) {
 let modelsCache = new Map(); // projectId -> { data, timestamp }
 let modelsRefreshPromises = new Map(); // projectId -> in-flight refresh
 const MODELS_FRESH_TTL_MS = 30_000;
+// Bumped by every invalidation. A refresh that started before one read the
+// catalog as it was then (signed out, say), so its answer is neither cached
+// nor sent — it fetches again instead — and callers after the invalidation
+// don't join it.
+let modelsGeneration = 0;
 
 function refreshModelsCache(projectId) {
   if (modelsRefreshPromises.has(projectId)) return modelsRefreshPromises.get(projectId);
+  const generation = modelsGeneration;
   const promise = (async () => {
     try {
       const models = await fetchModelsWithMerge(projectId);
+      if (generation !== modelsGeneration) {
+        if (modelsRefreshPromises.get(projectId) === promise) modelsRefreshPromises.delete(projectId);
+        return refreshModelsCache(projectId);
+      }
       if (models) {
         modelsCache.set(projectId, { data: models, timestamp: Date.now() });
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -3742,7 +3778,7 @@ function refreshModelsCache(projectId) {
       }
       return models;
     } finally {
-      modelsRefreshPromises.delete(projectId);
+      if (modelsRefreshPromises.get(projectId) === promise) modelsRefreshPromises.delete(projectId);
     }
   })();
   modelsRefreshPromises.set(projectId, promise);
@@ -3750,7 +3786,9 @@ function refreshModelsCache(projectId) {
 }
 
 function invalidateModelsCache(projectId) {
+  modelsGeneration++;
   if (projectId === undefined) {
+    modelsRefreshPromises = new Map();
     modelsCache = new Map();
   } else {
     modelsCache.delete(projectId);

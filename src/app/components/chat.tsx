@@ -45,6 +45,7 @@ import { CopyToClipboard } from 'react-copy-to-clipboard';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import PowerOutlinedIcon from '@mui/icons-material/PowerOutlined';
 import { useThemeIcon } from './theme-rail-icon';
+import { extractSkillDrafts, isSkillUpdate, retargetDraft, showSkillDrafts, type SkillDraftStatus } from '@/app/utils/skill-draft';
 
 import '@/app/styles/chat.css';
 
@@ -272,7 +273,7 @@ export default function Chat(props: {
   onConversationCreated?: (conversation: any) => void,
   onConversationUpdate?: (conversation: any) => void,
   onOpenTab?: (tab: OpenTabRequest) => void,
-  onCreateSkill?: (name: string) => void,
+  onCreateSkill?: (name: string, content?: string) => Promise<boolean> | void,
   // Bumped by the parent to pull focus into the composer — set after a project
   // is created, so the new project opens ready to type into.
   focusComposerTrigger?: number
@@ -371,10 +372,40 @@ export default function Chat(props: {
   const isLoading = starting || session.busy;
   // A turn can add, change or delete a skill ("save this as a skill"); when it
   // ends, have the "/" picker and the skills panel read the list again.
+  // A reply that drafted a skill (see utils/skill-draft) is created here through
+  // the same call as the "/" command, which also refreshes both lists.
+  //
+  // Each drafted skill's state, by `<message id>:<name>`, so its line reads
+  // "Writing skill…" until the API has created it. A message with no entry is
+  // one from before this view (already created), unless its turn just ended.
+  const [skillDraftStatus, setSkillDraftStatus] = useState<Record<string, SkillDraftStatus>>({});
   const wasBusyRef = useRef(false);
   useEffect(() => {
     if (wasBusyRef.current && !session.busy) {
-      window.dispatchEvent(new CustomEvent('skillsSaved'));
+      const lastIdx = messages.map((m: any) => m.role).lastIndexOf('assistant');
+      const last: any = lastIdx >= 0 ? messages[lastIdx] : null;
+      const drafts = typeof last?.content === 'string' ? extractSkillDrafts(last.content) : [];
+      if (drafts.length > 0 && props.onCreateSkill) {
+        // "Update the skill …": the one drafted earlier in this conversation is
+        // replaced, even if the model gave the new version another name.
+        const earlier = messages.slice(0, lastIdx);
+        const prompt: any = [...earlier].reverse().find((m: any) => m.role === 'user');
+        const target = isSkillUpdate(prompt?.content) && drafts.length === 1
+          ? [...earlier].reverse()
+            .filter((m: any) => m.role === 'assistant' && typeof m.content === 'string')
+            .map((m: any) => extractSkillDrafts(m.content).pop()?.name)
+            .find(Boolean)
+          : undefined;
+        const key = (name: string) => `${last.id}:${name}`;
+        setSkillDraftStatus((s) => ({ ...s, ...Object.fromEntries(drafts.map((d) => [key(d.name), 'writing'])) }));
+        drafts.forEach(async (d) => {
+          const save = target ? retargetDraft(d, target) : d;
+          const ok = await props.onCreateSkill?.(save.name, save.content);
+          setSkillDraftStatus((s) => ({ ...s, [key(d.name)]: ok ? 'saved' : 'failed' }));
+        });
+      } else {
+        window.dispatchEvent(new CustomEvent('skillsSaved'));
+      }
     }
     wasBusyRef.current = session.busy;
   }, [session.busy]);
@@ -1397,7 +1428,11 @@ export default function Chat(props: {
                                   rehypePlugins={chatRehypePlugins}
                                   remarkPlugins={chatRemarkPlugins}
                                   plugins={{ code, mermaid, math, cjk }}>
-                                  {msg.content || ''}
+                                  {showSkillDrafts(msg.content || '', (name) =>
+                                    skillDraftStatus[`${msg.id}:${name}`]
+                                    // The render between the turn ending and the effect above
+                                    // starting its create: still writing, not yet saved.
+                                    ?? (msg.is_new || (wasBusyRef.current && !session.busy) ? 'writing' : 'saved'))}
                                 </Streamdown>
                               )}
                             </div>
@@ -1538,7 +1573,7 @@ export default function Chat(props: {
                           {msg.content && !msg.is_new && (
                             <div className="flex items-center gap-1 mt-2 px-1">
                               <CopyToClipboard
-                                text={msg.content}
+                                text={showSkillDrafts(msg.content)}
                                 onCopy={() => {
                                   setCopied(msg.id);
                                   setTimeout(() => setCopied(""), 1500);

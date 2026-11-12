@@ -205,7 +205,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   slpListModels: (projectId) => ipcRenderer.invoke('slp-list-models', projectId),
   slpMcpCatalog: () => ipcRenderer.invoke('slp-mcp-catalog'),
   slpInitModel: (modelName, projectId) => ipcRenderer.invoke('slp-init-model', modelName, projectId),
-  slpSetModelEnabled: (modelName, enabled, projectId) => ipcRenderer.invoke('slp-set-model-enabled', modelName, enabled, projectId),
+  slpSetModelEnabled: (modelName, enabled, projectId, where) => ipcRenderer.invoke('slp-set-model-enabled', modelName, enabled, projectId, where),
   slpLoadModel: (modelName, projectId) => ipcRenderer.invoke('slp-load-model', modelName, projectId),
   slpCancelModelDownload: (modelName) => ipcRenderer.invoke('slp-cancel-model-download', modelName),
   slpGetDownloadState: () => ipcRenderer.invoke('slp-get-download-state'),

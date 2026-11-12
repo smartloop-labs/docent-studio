@@ -1,4 +1,4 @@
-import { Tooltip } from '@mui/material';
+import ModelBrandIcon from './model-brand-icon';
 import {
   buildFlow,
   fmtMs,
@@ -11,9 +11,9 @@ import {
  * The routing log for one turn, as rendered in the Logs panel.
  *
  * A turn is a sequence of hops the backend narrates over SSE: the model the
- * orchestrator picked (sometimes several), a document search, generation. Read
- * as a log, newest at the bottom, stamped relative to the turn's start. The
- * chat itself stays clean — the panel is the only place this shows.
+ * orchestrator picked (sometimes several), a document search, a tool,
+ * generation. Shown as a plain log of those lines. The chat itself stays
+ * clean; the panel is the only place this shows.
  */
 
 /** A glyph per hop kind — identity never rests on color alone. */
@@ -75,81 +75,54 @@ export function NodeGlyph({ kind, size = 12 }: { kind: NodeKind; size?: number }
 }
 
 /**
- * The log itself: a stamped line per hop down a spine.
- *
- * Deliberately no per-hop progress bars. A bar implies a job filling toward
- * completion, and these hops are already finished by the time you read them —
- * the elapsed stamp is the honest encoding.
+ * The log itself: every line the backend sent for the run, verbatim, stamped
+ * from the run's start, with how long it lasted — nothing hidden, merged or
+ * summarised. Then how the run ended.
  */
-export function FlowLog({ turn, now }: { turn: TraceTurn; now: number }) {
-  const nodes = buildFlow(turn, now);
+/** The model a "Selected <model> for …" line names, if it names one. */
+const modelOf = (label: string) => label.match(/^selected\s+(\S+)\s+for\b/i)?.[1];
 
+export function FlowLog({ turn, now }: { turn: TraceTurn; now: number }) {
+  const nodes = buildFlow(turn, now).filter((n) => n.kind !== 'prompt');
+
+  // Sized to be read, not scanned: 12px text on a 20px line, the message in
+  // readable ink, the stamp and duration as quiet fixed columns either side.
+  // Down the middle, a spine: each line's mark — the model's own logo where a
+  // line names one, else the hop's glyph — joined to the next by a hairline,
+  // so the run reads as one path rather than a list of unrelated lines.
   return (
     <div className="flex flex-col">
       {nodes.map((n, i) => {
-        const isModel = n.kind === 'model';
         const isTerminal = n.kind === 'answer' || n.kind === 'halted';
-        const accent = isModel
-          ? 'var(--sl-brand-primary)'
-          : isTerminal && turn.outcome === 'error'
-            ? 'var(--sl-status-error)'
-            : 'var(--sl-text-muted)';
+        const failed = isTerminal && turn.outcome === 'error';
+        const ms = isTerminal ? undefined : n.ms;
         const last = i === nodes.length - 1;
+        const model = n.kind === 'model' ? modelOf(n.label) : undefined;
         return (
-          <div key={`${n.kind}-${i}-${n.label}`} className="flex gap-2">
-            {/* Spine: the glyph marks this hop, the line carries to the next. */}
-            <div className="flex flex-col items-center flex-shrink-0" style={{ width: 12 }}>
-              <span className="flex items-center justify-center" style={{ color: accent, height: 16 }}>
-                <NodeGlyph kind={n.kind} />
+          <div key={`${n.kind}-${i}-${n.label}`} className="flex items-stretch gap-2.5 min-w-0">
+            <span className="w-10 text-right text-[10px] leading-5 font-mono tabular-nums flex-shrink-0 text-sl-text-disabled">
+              {fmtStamp(n.at)}
+            </span>
+
+            <div className="flex flex-col items-center w-4 flex-shrink-0">
+              <span
+                className={`flex items-center justify-center h-5 ${n.kind === 'model' ? 'text-sl-brand-primary' : failed ? 'text-sl-status-error' : isTerminal ? 'text-sl-text-secondary' : 'text-sl-text-faint'}`}
+              >
+                {model ? <ModelBrandIcon name={model} size={13} /> : <NodeGlyph kind={n.kind} size={13} />}
               </span>
-              {!last && (
-                <span
-                  className="flex-1 w-px my-0.5"
-                  style={{ backgroundColor: 'var(--sl-border-default)', minHeight: 10 }}
-                />
-              )}
+              {!last && <span className="flex-1 w-px min-h-2 bg-sl-border" />}
             </div>
 
-            <div className={`flex-1 min-w-0 ${last ? '' : 'pb-1.5'}`}>
-              <div className="flex items-baseline gap-1.5">
-                {/* The stamp: mono and tabular so the column reads as a column. */}
-                <span
-                  className="text-[10px] font-mono tabular-nums flex-shrink-0"
-                  style={{ color: 'var(--sl-text-disabled)' }}
-                >
-                  +{fmtStamp(n.at)}
-                </span>
-                <Tooltip title={n.ms != null ? `${n.label} — took ${fmtMs(n.ms)}` : n.label} placement="left" arrow>
-                  {/* Wraps rather than clipping: the panel is ~300px wide and a
-                      backend status line is a sentence, so truncating hid the
-                      half that says what it was doing. */}
-                  <span
-                    className="text-[11px] cursor-default flex-1 min-w-0 break-words"
-                    style={{ color: 'var(--sl-text-muted)' }}
-                  >
-                    {/* Verbatim from the server, and no emphasis on model rows:
-                        the glyph in the spine already says which kind of hop this
-                        is, so re-saying it in ink weight was the same fact twice.
-                        An open hop trails an ellipsis — the "still going" signal
-                        the backend's own status text uses. */}
-                    {n.label}{n.running ? '…' : ''}
-                  </span>
-                </Tooltip>
-                {n.ms != null && n.ms >= 50 && !isTerminal && (
-                  <span className="text-[10px] font-mono tabular-nums flex-shrink-0" style={{ color: 'var(--sl-text-faint)' }}>
-                    {fmtMs(n.ms)}
-                  </span>
-                )}
-              </div>
+            <span
+              className={`text-[12px] leading-5 flex-1 min-w-0 break-words ${last ? '' : 'pb-2'} ${failed ? 'text-sl-status-error' : isTerminal ? 'font-medium text-sl-text-primary' : 'text-sl-text-secondary'}`}
+            >
+              {n.label}{n.running ? '…' : ''}
+              {n.detail && <span className="text-sl-text-faint"> · {n.detail}</span>}
+            </span>
 
-              {n.detail && (
-                /* Nested under its line, log-style, so it reads as belonging to
-                   the hop above rather than as another event. */
-                <span className="block text-[10px] pl-[34px] break-words" style={{ color: 'var(--sl-text-faint)' }}>
-                  └ {n.detail}
-                </span>
-              )}
-            </div>
+            <span className="w-10 text-right text-[10px] leading-5 font-mono tabular-nums flex-shrink-0 text-sl-text-faint">
+              {ms != null && ms >= 50 ? fmtMs(ms) : ''}
+            </span>
           </div>
         );
       })}

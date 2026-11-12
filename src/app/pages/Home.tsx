@@ -1083,15 +1083,19 @@ export default function Home() {
   };
 
   // Create a new skill from the standard template (name filled from the "/command")
-  // and open it in the editor. If a skill with the same slug already exists we just
+  // and open it in the editor (a chat-drafted one is only saved). If a skill with the same slug already exists we just
   // open that one instead of adding a duplicate.
-  const createSkillFromTemplate = async (rawName: string) => {
-    if (!selectedProject?.id) return;
+  //
+  // `drafted` is a full SKILL.md the model wrote for a chat request ("create a
+  // skill that …"): it is created through this same call, and replaces the
+  // content of a skill that already has the name — the user asked for it.
+  const createSkillFromTemplate = async (rawName: string, drafted?: string): Promise<boolean> => {
+    if (!selectedProject?.id) return false;
     const slug = rawName.trim().replace(/\s+/g, '-').toLowerCase().replace(/[^a-z0-9-]/g, '');
-    if (!slug) return;
+    if (!slug) return false;
     const title = slug.split('-').filter(Boolean)
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-    const content =
+    const content = drafted ??
 `---
 name: ${slug}
 description: A clear description of what this skill does and when to use it
@@ -1126,14 +1130,23 @@ description: A clear description of what this skill does and when to use it
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content }),
         });
-        if (!res.ok) return;
+        if (!res.ok) return false;
+      } else if (drafted) {
+        const res = await fetch(`${base}/v1/projects/${selectedProject.id}/skills/${encodeURIComponent(exists.id || exists.name)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content }),
+        });
+        if (!res.ok) return false;
       }
 
       const list = await fetchList();
       setProjectSkills(list);
       window.dispatchEvent(new CustomEvent('skillsSaved'));
       const idx = list.findIndex((s: any) => norm(s.name) === norm(slug));
-      if (idx >= 0) {
+      // A skill drafted in chat is shown in the reply and stays there; only the
+      // "/" command, which starts from a template, opens the editor to fill it in.
+      if (idx >= 0 && !drafted) {
         handleOpenTab({
           id: `skill-${list[idx].id || idx}`,
           type: 'skill',
@@ -1141,8 +1154,10 @@ description: A clear description of what this skill does and when to use it
           data: { index: idx },
         } as OpenTab);
       }
+      return idx >= 0;
     } catch (ex) {
       console.error('Error creating skill from template:', ex);
+      return false;
     }
   };
 
