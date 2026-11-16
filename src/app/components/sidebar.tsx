@@ -734,7 +734,7 @@ export default function Sidebar({ user, mobileOpen, onMobileClose, collapsed = f
               gap: 0.5
             }}
           >
-            <span className="text-xl font-semibold tracking-tight" style={{ color: 'var(--sl-text-primary)' }}>smartloop</span>
+            <span className="text-xl font-semibold tracking-tight" style={{ color: 'var(--sl-text-primary)' }}>docent</span>
             <span className="text-xl font-semibold" style={{ color: 'var(--sl-brand-primary)' }}>.</span>
           </Box>
           {onToggleCollapse && (

@@ -237,7 +237,7 @@ export const mcpNameFromUrl = (raw: string): string => {
  */
 export const buildMcpDefinition = (name: string, url: string): string =>
   [
-    '# Written by Smartloop Studio from a server URL.',
+    '# Written by Docent Studio from a server URL.',
     '',
     '[[mcp]]',
     `name = ${JSON.stringify(name)}`,

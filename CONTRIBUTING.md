@@ -1,11 +1,11 @@
-# Contributing to Smartloop Studio
+# Contributing to Docent Studio
 
-Thanks for your interest in improving Smartloop Studio! Bug reports, fixes,
+Thanks for your interest in improving Docent Studio! Bug reports, fixes,
 features, and docs are all welcome.
 
 ## License of contributions
 
-Smartloop Studio is licensed under the [Apache License, Version 2.0](LICENSE).
+Docent Studio is licensed under the [Apache License, Version 2.0](LICENSE).
 Per section 5 of the license, any contribution you intentionally submit for
 inclusion in this project is licensed under the same Apache 2.0 terms, without
 any additional terms or conditions.

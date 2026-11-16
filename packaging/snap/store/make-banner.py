@@ -135,7 +135,7 @@ def build_banner():
     d = ImageDraw.Draw(img)
     title_f = font_at(204, 700)
     tag_f = font_at(52, 500)
-    title = "Smartloop Studio"
+    title = "Docent Studio"
     tag = "YOUR AI MISSION CONTROL"          # tracked-out label, not sentence case
     tag_track = 7.5
 

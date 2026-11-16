@@ -1,8 +1,8 @@
 name: smartloop-studio
-title: Smartloop Studio
+title: Docent Studio
 summary: Local AI Assistant
 description: |
-  Smartloop Studio is your ultimate local AI mission control — it runs agents locally on your
+  Docent Studio is your ultimate local AI mission control — it runs agents locally on your
   device to extract information, generate new content, create skills, and
   connect to external systems.
 
@@ -33,7 +33,7 @@ description: |
   Free to use, with an optional Pro plan for larger models, exclusive
   orchestration updates and priority support.
 
-  Note: to let Smartloop Studio read files on external or removable drives,
+  Note: to let Docent Studio read files on external or removable drives,
   connect the interface once with:
 
       snap connect smartloop-studio:removable-media
@@ -115,7 +115,7 @@ parts:
     override-build: |
       craftctl default
       # snapcraft cannot parse a command path containing a space
-      mv "$CRAFT_PART_INSTALL/opt/Smartloop Studio" "$CRAFT_PART_INSTALL/opt/smartloop-studio"
+      mv "$CRAFT_PART_INSTALL/opt/Docent Studio" "$CRAFT_PART_INSTALL/opt/smartloop-studio"
     stage-packages:
       # Only the libraries Electron needs that gnome-46-2404 and core24 do not
       # provide; everything else deliberately comes from the platform snap so

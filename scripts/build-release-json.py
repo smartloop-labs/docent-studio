@@ -150,7 +150,7 @@ def build_release(
 ) -> dict:
     """Parse electron-builder yml files and return a ReleaseCreate payload."""
     artifacts = []
-    release_name = f"Smartloop Studio {version}"
+    release_name = f"Docent Studio {version}"
 
     for yml_path in yml_paths:
         filename = yml_path.name

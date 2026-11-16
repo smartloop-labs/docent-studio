@@ -41,7 +41,7 @@ function trayIcon() {
  */
 function createTray() {
   tray = new Tray(trayIcon());
-  tray.setToolTip('Smartloop Studio');
+  tray.setToolTip('Docent Studio');
 
   // Left-click on the tray icon shows the window (Windows/Linux; on macOS a
   // tray with a context menu opens the menu on click instead).
@@ -151,7 +151,7 @@ async function refreshTray() {
   const template = [];
 
   template.push(
-    { label: 'Smartloop Studio', enabled: false },
+    { label: 'Docent Studio', enabled: false },
     { type: 'separator' },
     { label: `Service: ${statusLabel}`, enabled: false },
     { type: 'separator' },
@@ -240,12 +240,12 @@ function setTrayProgress(pct, status) {
   if (!tray) return;
 
   if (pct === null || status === 'done' || status === 'error') {
-    tray.setToolTip('Smartloop Studio');
+    tray.setToolTip('Docent Studio');
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.setProgressBar(-1); // remove progress bar
     }
   } else {
-    tray.setToolTip(`Smartloop Studio - Processing document ${pct}%`);
+    tray.setToolTip(`Docent Studio - Processing document ${pct}%`);
     if (process.platform === 'darwin' && mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.setProgressBar(pct / 100);
     }

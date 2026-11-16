@@ -56,11 +56,11 @@ for (const path of Object.keys(presetModules).sort()) {
   else console.error(`[themes] failed to load preset ${path}: ${error}`);
 }
 
-// Safety net: never leave the app without the default theme (Smartloop).
+// Safety net: never leave the app without the default theme (Docent).
 if (!loadedThemes.some((t) => t.id === 'smartloop')) {
   loadedThemes.unshift({
     id: 'smartloop',
-    name: 'Smartloop',
+    name: 'Docent',
     description: 'Pink accent dark theme inspired by GitHub Dark',
     mode: 'dark',
     colors: {
@@ -124,7 +124,7 @@ export function applyThemeCssVars(theme: ThemeDefinition) {
   // value and went invisible on any theme with a dark accent.
   s.setProperty('--sl-brand-contrast', brandContrast(c.brand.primary));
 
-  // Body fill for the Smartloop logo mark — the theme's primary text in both
+  // Body fill for the Docent logo mark — the theme's primary text in both
   // modes, so the mark is the app-icon white on a dark surface and near-black on
   // a light one. It used to take the brand primary on light themes, which was
   // the same colour as the mark's dot: body and dot resolved identically and the

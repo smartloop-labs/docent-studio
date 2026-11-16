@@ -106,7 +106,7 @@ Paste the entitlement section into **App Store Connect → App Review Informatio
 
 ### `com.apple.security.network.server` — keep, justify
 
-> All inference in Smartloop Studio is local. On launch the app spawns the SLP
+> All inference in Docent Studio is local. On launch the app spawns the SLP
 > runtime bundled inside the app (`Contents/Resources/slp`), which runs an HTTP
 > server bound to `127.0.0.1` on an ephemeral port. The app's UI talks to that
 > server over `http://localhost:<port>` for chat completions, document
@@ -181,7 +181,7 @@ from it.** Registration stays on the web.
   `ASWebAuthenticationSession`; an app-owned view is the equivalent.
 
 The view uses its own session partition and a UA with the app's
-`Smartloop Studio/<v> Electron/<v>` product tokens stripped, so providers that
+`Docent Studio/<v> Electron/<v>` product tokens stripped, so providers that
 refuse embedded browsers still render.
 
 ### What the API had to grow

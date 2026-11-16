@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Release admin for Smartloop Studio — pull a faulty build off the update feed
+Release admin for Docent Studio — pull a faulty build off the update feed
 and put a corrected one in its place.
 
 Companion to ci_push_release.py, which only ever moves a release forward
@@ -304,7 +304,7 @@ def cmd_replace(args, base, token):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Inspect, revoke, and replace Smartloop Studio releases.",
+        description="Inspect, revoke, and replace Docent Studio releases.",
         epilog="Replacing a published version in place can break updates for clients "
                "already on it — see the module docstring.",
         formatter_class=argparse.RawDescriptionHelpFormatter,

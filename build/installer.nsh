@@ -1,4 +1,4 @@
-; Custom NSIS steps for the Smartloop Studio installer (electron-builder
+; Custom NSIS steps for the Docent Studio installer (electron-builder
 ; nsis.include). LogicLib is include-guarded, so this is safe even though the
 ; electron-builder template already pulls it in.
 !include LogicLib.nsh

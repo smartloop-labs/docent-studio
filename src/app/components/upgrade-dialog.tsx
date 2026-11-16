@@ -162,7 +162,7 @@ export default function UpgradeDialog({ open, onClose, method, product }: Upgrad
             <Box className="flex flex-col gap-1">
               <h3 className="text-sl-text-primary text-sm font-semibold">{product?.title || 'Smartloop Pro'}</h3>
               <p className="text-[11px] text-sl-text-muted leading-relaxed">
-                Get more out of Smartloop Studio.
+                Get more out of Docent Studio.
               </p>
             </Box>
           )}

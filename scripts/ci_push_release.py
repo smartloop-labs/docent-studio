@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CI release publisher for Smartloop Studio.
+CI release publisher for Docent Studio.
 
 Pushes a successful build's artifact details into the Smartloop releases API by
 POSTing a draft release and then PATCHing it to `published`. Designed to be
@@ -33,7 +33,7 @@ those straight into each artifact:
 
 {
   "version": "1.0.15",
-  "name": "Smartloop Studio 1.0.15",
+  "name": "Docent Studio 1.0.15",
   "notes": "Bug fixes and improvements",
   "channel": "stable",
   "min_version": null,
@@ -137,7 +137,7 @@ def publish(base: str, token: str, version: str, skip_validation: bool) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Push a Smartloop Studio build release to the API (create + publish).",
+        description="Push a Docent Studio build release to the API (create + publish).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--file", required=True, help="Release JSON payload (ReleaseCreate shape)")
