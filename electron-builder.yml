@@ -1,8 +1,10 @@
 appId: ai.smartloop.studio
-# Kept as "Smartloop Studio" on purpose: it names the installed bundle
-# (Smartloop Studio.app / install dir). Renaming it would leave existing users
-# with two apps side by side. The in-app brand is Docent Studio.
-productName: Smartloop Studio
+# Names the installed bundle (Docent Studio.app), the Windows install dir and
+# the Linux desktop entry. Renamed from "Smartloop Studio" in 1.0.75: on macOS
+# the old Smartloop Studio.app stays until the user deletes it, but both open
+# the same data. userData and logs follow package.json "name"
+# (smartloop-studio), not this, and the agent lives in ~/.smartloop either way.
+productName: Docent Studio
 copyright: Copyright © 2026 Smartloop Inc.
 # buildVersion unset: electron-builder falls back to package.json's version.
 directories:
@@ -116,7 +118,7 @@ mas:
 # Mac App Store DEVELOPMENT build — a locally-LAUNCHABLE sandboxed .app for
 # testing the App Sandbox without going through TestFlight. Build with:
 #   MAS_BUILD=1 electron-builder --mac mas-dev   (npm run electron-pack-mas-dev)
-# Output: dist/mas-dev-arm64/Smartloop Studio.app — double-click to run it under
+# Output: dist/mas-dev-arm64/Docent Studio.app — double-click to run it under
 # the REAL sandbox (process.mas === true), so it reproduces spawn EPERM /
 # mimetypes / sem_open exactly like the store build, but unlike the distribution
 # .pkg it launches locally. Requirements (one-time, from the Apple Developer
