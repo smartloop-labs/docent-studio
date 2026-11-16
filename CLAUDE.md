@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Smartloop Studio — an Electron + React desktop app for chatting with local SLMs (Small Language Models). It manages a local backend service called SLP (installed at `~/.smartloop/`) that handles model inference, document indexing, and RAG. The app connects to SLP over HTTP on localhost.
+Docent Studio — an Electron + React desktop app for chatting with local SLMs (Small Language Models). It manages a local backend service called SLP (installed at `~/.smartloop/`) that handles model inference, document indexing, and RAG. The app connects to SLP over HTTP on localhost.
 
 ## Commands
 

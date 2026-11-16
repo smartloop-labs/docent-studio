@@ -1,6 +1,6 @@
 ---
 name: release-prod
-description: Production release of Smartloop Studio desktop — dispatch the Release Prod workflow (electron app + bundled slp agent versions), merge its "Release prod" PR, and follow build & deploy up to the manual production approval. Use when the user says to release/ship the desktop app or Studio, usually right after a new slp agent release.
+description: Production release of Docent Studio desktop — dispatch the Release Prod workflow (electron app + bundled slp agent versions), merge its "Release prod" PR, and follow build & deploy up to the manual production approval. Use when the user says to release/ship the desktop app or Studio, usually right after a new slp agent release.
 argument-hint: [agent_version] [electron_version]
 disable-model-invocation: true
 ---

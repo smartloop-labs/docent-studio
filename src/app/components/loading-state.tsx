@@ -7,7 +7,7 @@ import { LogoMark } from '@/app/components/logo';
  * Two shapes, one look. Inline (`mark` off) is a spinner beside a label, for
  * work happening within a screen — the size and colour the rest of the app
  * already uses for that (see the import button in sidebar.tsx). Branded
- * (`mark` on) puts the Smartloop mark above it, for the moments that take a
+ * (`mark` on) puts the Docent mark above it, for the moments that take a
  * whole window: arriving from sign-in, waiting on a provider, opening the main
  * view.
  *
@@ -22,7 +22,7 @@ export default function LoadingState({
   mark = false,
 }: {
   label?: string;
-  /** Show the Smartloop mark above the spinner — for full-window waits. */
+  /** Show the Docent mark above the spinner — for full-window waits. */
   mark?: boolean;
 }) {
   const row = (

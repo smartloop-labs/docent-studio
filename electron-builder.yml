@@ -1,4 +1,7 @@
 appId: ai.smartloop.studio
+# Kept as "Smartloop Studio" on purpose: it names the installed bundle
+# (Smartloop Studio.app / install dir). Renaming it would leave existing users
+# with two apps side by side. The in-app brand is Docent Studio.
 productName: Smartloop Studio
 copyright: Copyright © 2026 Smartloop Inc.
 # buildVersion unset: electron-builder falls back to package.json's version.

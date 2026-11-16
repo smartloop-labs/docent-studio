@@ -1,4 +1,4 @@
-# Releasing Smartloop Studio
+# Releasing Docent Studio
 
 How a production release is cut, who has to click what, and which GitHub Action
 triggers which. There are only **four manual touch-points** — everything else is

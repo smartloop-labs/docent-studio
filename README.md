@@ -1,4 +1,4 @@
-# Smartloop Studio
+# Docent Studio
 
 A cross-platform desktop app for chatting with **local** small language models (SLMs) — private by default, everything runs on your machine.
 
@@ -11,7 +11,7 @@ talks to it over HTTP on localhost using an OpenAI-compatible API.
 | | |
 |---|---|
 | **App ID** | `ai.smartloop.studio` |
-| **Product name** | Smartloop Studio |
+| **Product name** | Docent Studio |
 | **Version** | see `package.json` (`version`) |
 | **SLP framework** | see `SLP_VERSION` in `Makefile` / `electron/slp-setup.js` |
 | **Protocol** | `smartloop://` (OAuth callbacks + deep links) |
@@ -236,7 +236,7 @@ and publishing to the update feed — see [RELEASING.md](RELEASING.md).
 
 ## 🤝 Contributing
 
-Contributions are welcome! Smartloop Studio is open source under the
+Contributions are welcome! Docent Studio is open source under the
 [Apache License 2.0](LICENSE), and every contribution is accepted under the same
 license.
 
@@ -261,7 +261,7 @@ downloads or bundles is proprietary software from Smartloop Inc., distributed
 under its own terms. The Apache 2.0 license applies only to the source code in
 this repository.
 
-**Trademarks.** "Smartloop", "Smartloop Studio" and the Smartloop logos are
+**Trademarks.** "Smartloop", "Docent", "Docent Studio" and their logos are
 trademarks of Smartloop Inc. As section 6 of the Apache License states, the
 license does not grant permission to use them. If you distribute a modified
 build, please give it a different name and icon.

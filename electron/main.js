@@ -2500,11 +2500,11 @@ async function confirmModelDownload() {
     defaultId: 0,
     cancelId: 1,
     title: 'Download Language Model',
-    message: 'Smartloop Studio needs to download a language model',
+    message: 'Docent Studio needs to download a language model',
     detail:
-      `Smartloop Studio answers you with a model that runs on this computer, so your chats and documents never leave it. `
+      `Docent Studio answers you with a model that runs on this computer, so your chats and documents never leave it. `
       + `Setting up downloads that model once — about ${DEFAULT_MODEL_DOWNLOAD_MB} MB — over your internet connection.\n\n`
-      + `Until it finishes there is nothing to chat with. You can start the download later from the Smartloop menu bar icon.`,
+      + `Until it finishes there is nothing to chat with. You can start the download later from the Docent Studio menu bar icon.`,
   };
   const { response } = parent
     ? await dialog.showMessageBox(parent, options)
@@ -4262,7 +4262,7 @@ ipcMain.handle('auth-delete-account', async () => {
       // 404/405: a service older than the route. The framework ships inside
       // the app, so this only happens on a dev install pointed at an old SLP.
       if (res.status === 404 || res.status === 405) {
-        return { success: false, error: 'The local Smartloop service is out of date. Update the app and try again.' };
+        return { success: false, error: 'The Docent Studio local service is out of date. Update the app and try again.' };
       }
       let detail = '';
       try { detail = (await res.json())?.detail || ''; } catch { /* no body */ }

@@ -156,7 +156,7 @@ export default function Login() {
   // otherwise fail every attempt with a generic "please try again", so say what
   // actually needs to happen.
   const bridgeStale = !api?.authOtpRequest || !api?.authOtpVerify;
-  const STALE_BRIDGE_MESSAGE = 'Restart Smartloop Studio to finish updating, then sign in.';
+  const STALE_BRIDGE_MESSAGE = 'Restart Docent Studio to finish updating, then sign in.';
 
   // The provider is done; what follows is our own callback, which is plumbing
   // and not a page anyone should be shown. Main puts that window away — so say

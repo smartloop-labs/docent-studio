@@ -547,7 +547,7 @@ export default function SettingsPage() {
                             return (
                                 <div className="flex items-center justify-between gap-4">
                                     <div className="flex items-center gap-2.5 min-w-0">
-                                        {/* Smartloop mark as inline SVG (transparent bg, theme-colored)
+                                        {/* Docent mark as inline SVG (transparent bg, theme-colored)
                                             so it reads cleanly on the dark surface — unlike the PNG
                                             app-icon tile, which carries its own black background. */}
                                         <div
@@ -556,7 +556,7 @@ export default function SettingsPage() {
                                         >
                                             <LogoMark className="w-5 h-5" />
                                         </div>
-                                        <h2 className="text-lg md:text-xl font-semibold truncate" style={{ color: 'var(--sl-text-primary)' }}>Smartloop Studio</h2>
+                                        <h2 className="text-lg md:text-xl font-semibold truncate" style={{ color: 'var(--sl-text-primary)' }}>Docent Studio</h2>
                                     </div>
 
                                     {/* One element, either way. With nothing newer published it is
@@ -607,7 +607,7 @@ export default function SettingsPage() {
                             <h2 className="text-lg md:text-xl font-semibold" style={{ color: 'var(--sl-text-primary)' }}>Theme</h2>
                         </Box>
                         <p className="text-xs md:text-sm mb-4 leading-relaxed" style={{ color: 'var(--sl-text-muted)' }}>
-                            Choose how Smartloop looks — switch between light and dark appearances to match your environment.
+                            Choose how Docent Studio looks — switch between light and dark appearances to match your environment.
                         </p>
                         <div className="flex flex-wrap gap-3">
                             {allThemes.map((t) => {
@@ -1067,7 +1067,7 @@ export default function SettingsPage() {
                             <h2 className="text-lg md:text-xl font-semibold" style={{ color: 'var(--sl-text-primary)' }}>Clean up</h2>
                         </Box>
                         <p className="text-xs md:text-sm mb-4 leading-relaxed" style={{ color: 'var(--sl-text-muted)' }}>
-                            Reclaim disk space used by Smartloop. Models you're using are kept, as are
+                            Reclaim disk space used by Docent Studio. Models you're using are kept, as are
                             <span className="font-mono"> {BOOTSTRAP_MODEL} </span> and the embedding model, which the
                             agent needs to run. The agent keeps running while it cleans up.
                         </p>
