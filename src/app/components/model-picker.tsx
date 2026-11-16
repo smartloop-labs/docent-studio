@@ -24,6 +24,7 @@ import {
     CAPABILITY_INFO,
     CAPABILITY_STYLE,
     TIER_INFO,
+    compareModels,
     contextTag,
     describeFailure,
     isLocked,
@@ -65,66 +66,6 @@ function Tag({ label, color, border, tip, icon }: { label: string; color: string
     return tip ? <Tooltip title={tip} arrow placement="top">{tag}</Tooltip> : tag;
 }
 
-/** A corner icon action, styled like a connection card's link button; never toggles the row itself. */
-function CornerAction({ icon, tip, onClick }: { icon: React.ReactNode; tip: string; onClick: () => void }) {
-    return (
-        <Tooltip title={tip} arrow placement="top">
-            <IconButton
-                size="small"
-                onClick={(e) => { e.stopPropagation(); onClick(); }}
-                sx={{
-                    color: 'var(--sl-text-faint)',
-                    padding: '2px',
-                    '&:hover': { color: 'var(--sl-brand-primary)' },
-                }}
-            >
-                {icon}
-            </IconButton>
-        </Tooltip>
-    );
-}
-
-/**
- * The other place a model served both ways can run, as a quiet icon beside
- * the corner's main control: the cloud for one on (or headed for) this
- * machine, a download for one running in the cloud. The main control — the
- * download, spinner or bulb — is renderState's; this is the rarer move, so it
- * stays faint and small rather than sitting beside it at equal weight. Not
- * offered where it wouldn't make sense: no cloud for a model the corner
- * already sends there (too big to run here), no download of one too big.
- */
-function OtherPlace({ remote, notHere, fits, gb, signedIn, onPick }: {
-    remote: boolean;
-    /** Neither on disk nor in the cloud yet — the corner's main control brings it in. */
-    notHere: boolean;
-    /** The local weights fit this machine's memory. */
-    fits: boolean;
-    gb?: number;
-    /** The cloud serves signed-in accounts only; logged out, it isn't offered. */
-    signedIn: boolean;
-    onPick: (where: 'cloud' | 'local') => void;
-}) {
-    if (signedIn && !remote && !(notHere && !fits)) {
-        return (
-            <CornerAction
-                icon={<CloudOutlinedIcon sx={{ fontSize: 13 }} />}
-                tip="Run in the cloud instead — on at once, nothing to download. Requests leave this machine."
-                onClick={() => onPick('cloud')}
-            />
-        );
-    }
-    if (remote && fits) {
-        return (
-            <CornerAction
-                icon={<FileDownloadOutlinedIcon sx={{ fontSize: 13 }} />}
-                tip={`Download${gb ? ` (~${gb} GB)` : ''} to run on this machine instead — requests stay here.`}
-                onClick={() => onPick('local')}
-            />
-        );
-    }
-    return null;
-}
-
 /**
  * Model switcher for the composer, in the shape users know from other agent
  * tools: a small pill under the prompt that opens the model list.
@@ -156,6 +97,12 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
     const [open, setOpen] = useState(false);
     const [contactOpen, setContactOpen] = useState(false);
     const [query, setQuery] = useState('');
+    // Which row of a both-ways model the user last acted on. The two rows share
+    // one model name, so a download, spinner or refusal keyed by that name is
+    // shown only on the row that asked for it.
+    const [requestedWhere, setRequestedWhere] = useState<Map<string, 'cloud' | 'local'>>(new Map());
+    const markRequested = (name: string, where: 'cloud' | 'local') =>
+        setRequestedWhere((prev) => (prev.get(name) === where ? prev : new Map(prev).set(name, where)));
     const searchRef = useRef<HTMLInputElement>(null);
 
     // Cmd/Ctrl+Shift+M opens the dialog from anywhere, matching the rail
@@ -254,16 +201,30 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
         };
 
         const buckets: { key: string; title: string; hint?: string; models: any[] }[] = [
-            // One list for every model you can use, in catalog order: turning
-            // one on or downloading it changes its bulb and tags, never its
-            // place, so the card under the pointer stays put.
+            // One list for every model you can use: local before cloud, then
+            // smallest to largest (compareModels). Both keys are fixed facts of
+            // a row, so turning one on or downloading it changes its bulb and
+            // tags, never its place — the card under the pointer stays put.
             { key: 'models', title: 'Models', models: [] },
             { key: 'signin', title: 'Free with sign-in', models: [] },
             { key: 'locked', title: 'Requires an upgrade', models: [] },
         ];
+        // A model the catalog serves both ways is two rows, Local and Cloud,
+        // so each place reads as its own choice. SLP registers a model one way
+        // at a time, so `_registered` marks the row that holds the registration;
+        // turning on the other row moves it there.
+        const rows: any[] = [];
         for (const m of pickable) {
+            if (!runsBothWays(m)) { rows.push(m); continue; }
+            const cloudNow = isRemote(m);
+            rows.push({ ...m, type: undefined, _where: 'local', _registered: !cloudNow });
+            rows.push({ ...m, type: 'remote', _where: 'cloud', _registered: cloudNow });
+        }
+        rows.sort(compareModels);
+        for (const m of rows) {
             if (!matches(m)) continue;
             const name = m.name || m.id || m.model;
+            const on = isEnabled(name) && m._registered !== false;
             // A model the plan doesn't grant is listed, not hidden. The cloud
             // returns it for exactly that reason — an anonymous caller gets the
             // whole catalog with is_accessible false on the Pro tier "so the
@@ -274,7 +235,7 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
             const locked = isLocked(m);
             // A locked model that is still on stays in the main list, where
             // it can be turned off.
-            const key = locked && !isEnabled(name) ? (lockRemedy(m, signedIn) === 'login' ? 'signin' : 'locked') : 'models';
+            const key = locked && !on ? (lockRemedy(m, signedIn) === 'login' ? 'signin' : 'locked') : 'models';
             buckets.find((b) => b.key === key)!.models.push(m);
         }
         return buckets.filter((b) => b.models.length > 0);
@@ -289,7 +250,8 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
         // `slp-set-model-enabled`; adding a cloud model takes the same path and
         // removing one is turning it off. The dialog stays open either way,
         // because with multi-select the next thing you do is usually pick another.
-        handleToggleModel(name, workspaceName, m.downloaded || isRemote(m) ? !isEnabled(name) : true);
+        if (m._where) markRequested(name, m._where);
+        handleToggleModel(name, workspaceName, m.downloaded || isRemote(m) ? !isEnabled(name) : true, m._where);
     };
 
     // Trigger. One model selected means the orchestrator has no choice left to
@@ -319,7 +281,7 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
     // gates it, a download glyph when it isn't on disk yet.
     // A cloud model has no download step — its /v1/init completes at once — so
     // it is just a bulb, like a downloaded local model.
-    const renderState = (st: { name: string; on: boolean; downloaded: boolean; locked: boolean; busy: boolean; isActive: boolean; remote: boolean; needsLogin: boolean; bringIn?: { where: 'cloud' | 'local'; gb?: number; blocked?: boolean; go: () => void } }) => {
+    const renderState = (st: { name: string; on: boolean; downloaded: boolean; locked: boolean; busy: boolean; isActive: boolean; remote: boolean; needsLogin: boolean; bringIn?: { where: 'cloud' | 'local'; gb?: number; blocked?: boolean; tooBig?: boolean; note?: string; go: () => void } }) => {
         if (st.busy && st.remote) {
             return (
                 <Tooltip title="Adding…" arrow placement="top">
@@ -384,8 +346,8 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
         // Not here yet: the one control downloads it (or, too big for this
         // machine, adds it in the cloud) and turns it on when that's done —
         // the way Get becomes Open, with no separate "now enable it" step.
-        if (!st.downloaded && !st.remote && st.bringIn) {
-            const { where, gb, blocked, go } = st.bringIn;
+        if (st.bringIn) {
+            const { where, gb, blocked, tooBig, note, go } = st.bringIn;
             if (blocked) {
                 return (
                     <Tooltip
@@ -401,9 +363,11 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
             }
             return (
                 <Tooltip
-                    title={where === 'cloud'
-                        ? `Too large to run on this machine${gb ? ` (needs ~${gb} GB)` : ''} — run it in the cloud and turn it on`
-                        : `Download${gb ? ` (~${gb} GB)` : ''} and turn it on`}
+                    title={(where === 'cloud'
+                        ? tooBig
+                            ? `Too large to run on this machine${gb ? ` (needs ~${gb} GB)` : ''} — run it in the cloud and turn it on`
+                            : 'Run it in the cloud and turn it on — nothing to download. Requests leave this machine.'
+                        : `Download${gb ? ` (~${gb} GB)` : ''} and turn it on`) + (note ? ` ${note}` : '')}
                     arrow
                     placement="top"
                 >
@@ -453,17 +417,27 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
     // so they should not be two different shapes.
     const renderRow = (m: any) => {
         const name = m.name || m.id || m.model;
-        const downloaded = !!m.downloaded;
-        const busy = isDownloading(name);
+        // One row of a both-ways model (see `groups`), or undefined for a model
+        // with only one place to run.
+        const variant: 'cloud' | 'local' | undefined = m._where;
+        const registered = m._registered !== false;
+        // A transfer or refusal belongs to the row that asked for it — or, with
+        // no request on record (a download started elsewhere), the registered row.
+        const asked = requestedWhere.get(name);
+        const mine = !variant || (asked ? asked === variant : registered);
+        const downloaded = registered && !!m.downloaded;
+        const busy = isDownloading(name) && mine;
         const percent = downloads.get(name)?.percent ?? 0;
-        const failure = downloadErrors.get(name);
+        const failure = mine ? downloadErrors.get(name) : undefined;
         // What to say and what to offer, decided by the status SLP answered.
         const remote = isRemote(m);
         const copy = failure ? describeFailure(failure, canContact, canUpgrade, remote) : null;
         const locked = isLocked(m);
         const needsLogin = locked && lockRemedy(m, signedIn) === 'login';
-        const on = isEnabled(name);
-        const isActive = activeAuto === name;
+        const on = isEnabled(name) && registered;
+        // The model is on in its other place: bringing this row in moves it.
+        const onElsewhere = !!variant && !registered && isEnabled(name);
+        const isActive = activeAuto === name && registered;
         // A locked row is inert, except that signing in (or, in the MAS build,
         // upgrading) is one click away, and a locked model that is still on can
         // always be turned off.
@@ -475,19 +449,23 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
         // turns it on once that's done. A download-only model downloads the way
         // it always has.
         const bringIn = (w: 'cloud' | 'local') => {
-            if (needsLogin) { setOpen(false); window.dispatchEvent(new CustomEvent('requestSignIn')); return; }
+            if (needsLogin || (w === 'cloud' && !signedIn)) { setOpen(false); window.dispatchEvent(new CustomEvent('requestSignIn')); return; }
+            if (both) markRequested(name, w);
             handleToggleModel(name, m.workspace_name || name, true, both ? w : undefined);
         };
         // Not on disk or in the cloud yet: the corner's one control, and a
         // click anywhere on the card, bring it in — locally if it fits (or has
         // nowhere else to run), else in the cloud.
-        const notHere = !downloaded && !remote && !on && !locked;
+        // The unregistered row of a both-ways model is never here yet.
+        const notHere = !locked && (!registered || (!downloaded && !remote && !on));
         // A model too big for this machine runs in the cloud if it's offered
         // there (signed in, and served both ways). Otherwise it has nowhere
         // to run: its download shows, disabled, and the card does nothing.
-        const cloudOpen = both && signedIn;
-        const defaultWhere: 'cloud' | 'local' = cloudOpen && !localFits ? 'cloud' : 'local';
-        const blocked = notHere && !localFits && !cloudOpen;
+        // A split row runs only in its own place; the other row offers the rest.
+        const cloudOpen = both && signedIn && !variant;
+        const defaultWhere: 'cloud' | 'local' = variant ?? (cloudOpen && !localFits ? 'cloud' : 'local');
+        const blocked = notHere && defaultWhere === 'local' && !localFits && !cloudOpen;
+        const moveNote = onElsewhere ? (variant === 'cloud' ? 'Moves it off this machine.' : 'Moves it off the cloud.') : undefined;
         const clickable = (notHere && !blocked) || (!notHere && (!locked || needsLogin || canUpgrade || on));
         const onRowClick = () => {
             if (!clickable) return;
@@ -501,14 +479,12 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
             toggle(m);
         };
         const where = locationTag(m);
-        // Size and memory describe weights on this machine, which a cloud model
+        // Memory pressure describes weights on this machine, which a cloud model
         // doesn't have.
         const pressure = remote ? null : memoryPressure(m, totalRamGb);
-        // The other place a both-ways model can run, beside the main control;
-        // hidden mid-transfer (the spinner owns the corner then) and on a
-        // plan-gated row.
-        const showOtherPlace = both && !busy && !locked;
-        const size = remote ? null : sizeTier(m);
+        // Parameter count is a fact of the model wherever it runs, so cloud rows
+        // show it too; memory pressure above stays local-only.
+        const size = sizeTier(m);
         const context = contextTag(m);
         const tier = tierTag(m);
         const maker = brandName(name);
@@ -516,7 +492,7 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
 
         return (
             <Box
-                key={name}
+                key={variant ? `${name}:${variant}` : name}
                 role="button"
                 onClick={onRowClick}
                 className={`group rounded-xl${isActive ? ' model-row-active' : ''}`}
@@ -564,19 +540,9 @@ export default function ModelPicker({ model, disabled = false }: ModelPickerProp
                     </span>
 
                     <div className="ml-auto flex items-center gap-0.5 flex-shrink-0">
-                        {showOtherPlace && (
-                            <OtherPlace
-                                remote={remote}
-                                notHere={notHere}
-                                fits={localFits}
-                                gb={localGb}
-                                signedIn={signedIn}
-                                onPick={bringIn}
-                            />
-                        )}
                         {renderState({
                             name, on, downloaded, locked, busy, isActive, remote, needsLogin,
-                            bringIn: notHere ? { where: defaultWhere, gb: localGb, blocked, go: () => bringIn(defaultWhere) } : undefined,
+                            bringIn: notHere ? { where: defaultWhere, gb: localGb, blocked, tooBig: !localFits, note: moveNote, go: () => bringIn(defaultWhere) } : undefined,
                         })}
                     </div>
                 </div>

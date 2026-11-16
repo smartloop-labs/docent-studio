@@ -24,6 +24,15 @@ export function paramBillions(m: any): number | null {
     return vals.length ? Math.max(...vals) : null;
 }
 
+// Order for the picker: local before cloud, then smallest to largest by
+// parameter count. A model with no known size goes last in its group; ties keep
+// catalog order (Array.prototype.sort is stable).
+export function compareModels(a: any, b: any): number {
+    const place = Number(isRemote(a)) - Number(isRemote(b));
+    if (place) return place;
+    return (paramBillions(a) ?? Infinity) - (paramBillions(b) ?? Infinity);
+}
+
 // Size cue for a row: pairs the real parameter size with the benefit it buys, so
 // a non-technical user sees both the number (which distinguishes two same-family
 // models) and what it means — smaller = faster/lighter, bigger = more capable.
@@ -32,8 +41,11 @@ export function sizeTier(m: any): { label: string; tip: string } | null {
     if (b == null) return null;
     const approx = b >= 10 ? Math.round(b) : Number.isInteger(b) ? b : +b.toFixed(1);
     const benefit = b < 1 ? 'Fastest' : b < 2.5 ? 'Fast' : b < 5 ? 'Balanced' : b < 10 ? 'Smarter' : 'Smartest';
+    // The count itself leads ("4B · Balanced"), so two models of one family —
+    // which share a friendly name — read apart at a glance.
+    const count = b < 1 ? `${Math.round(b * 1000)}M` : `${approx}B`;
     return {
-        label: benefit,
+        label: `${count} · ${benefit}`,
         tip: `About ${approx} billion parameters — ${benefit.toLowerCase()}. Larger models are more capable but use more memory and respond slower.`,
     };
 }

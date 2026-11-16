@@ -14,7 +14,8 @@ const code = createCodePlugin({
   themes: ['github-light', 'github-dark'],
 });
 import { mermaid } from "@streamdown/mermaid";
-import { math } from "@streamdown/math";
+import { createMathPlugin } from "@streamdown/math";
+import "katex/dist/katex.min.css";
 import { cjk } from "@streamdown/cjk";
 
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -45,6 +46,7 @@ import { CopyToClipboard } from 'react-copy-to-clipboard';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import PowerOutlinedIcon from '@mui/icons-material/PowerOutlined';
 import { useThemeIcon } from './theme-rail-icon';
+import { normalizeMath } from '@/app/utils/math-delimiters';
 import { extractSkillDrafts, isSkillUpdate, retargetDraft, showSkillDrafts, type SkillDraftStatus } from '@/app/utils/skill-draft';
 
 import '@/app/styles/chat.css';
@@ -249,6 +251,10 @@ const remarkLocalFileLinks = () => (tree: any) => {
     return [SKIP, index + children.length];
   });
 };
+
+// Inline `$…$` math on: replies write it far more than they write prices, and
+// normalizeMath escapes the `$` that opens an amount.
+const math = createMathPlugin({ singleDollarTextMath: true });
 
 const chatRemarkPlugins = [remarkLocalFileLinks, ...Object.values(defaultRemarkPlugins)];
 
@@ -1428,11 +1434,11 @@ export default function Chat(props: {
                                   rehypePlugins={chatRehypePlugins}
                                   remarkPlugins={chatRemarkPlugins}
                                   plugins={{ code, mermaid, math, cjk }}>
-                                  {showSkillDrafts(msg.content || '', (name) =>
+                                  {normalizeMath(showSkillDrafts(msg.content || '', (name) =>
                                     skillDraftStatus[`${msg.id}:${name}`]
                                     // The render between the turn ending and the effect above
                                     // starting its create: still writing, not yet saved.
-                                    ?? (msg.is_new || (wasBusyRef.current && !session.busy) ? 'writing' : 'saved'))}
+                                    ?? (msg.is_new || (wasBusyRef.current && !session.busy) ? 'writing' : 'saved')))}
                                 </Streamdown>
                               )}
                             </div>
