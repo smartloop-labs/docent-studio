@@ -20,18 +20,18 @@ export const LogoMark = ({ className = '' }: { className?: string }) => (
   </svg>
 );
 
-// The Docent wordmark — "docent" in the theme's primary text with the accent
-// dot, matching the sidebar and splash wordmarks. Sizes from the caller's
+// The Docent wordmark — "docent" in the theme's primary text with a subscript
+// "(studio)" in the accent, matching the sidebar and splash wordmarks. Sizes from the caller's
 // className (the viewBox does the scaling), and takes its fill from the theme
 // rather than a baked-in white — see `--sl-brand-mark` in themes.ts.
 export const Logo = ({ className = '' }: { className?: string }) => (
   <svg
-    viewBox="0 0 132 33"
+    viewBox="0 0 160 33"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     className={className}
     role="img"
-    aria-label="Docent"
+    aria-label="Docent Studio"
   >
     <text
       x="0"
@@ -43,7 +43,9 @@ export const Logo = ({ className = '' }: { className?: string }) => (
       fill="var(--sl-brand-mark)"
     >
       docent
+      <tspan dx="3" dy="5" fontSize="14" letterSpacing="0.3" fill="var(--sl-brand-primary)">
+        (studio)
+      </tspan>
     </text>
-    <circle cx="124" cy="22" r="4" fill="var(--sl-brand-primary)" />
   </svg>
 );
