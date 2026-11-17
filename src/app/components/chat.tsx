@@ -47,6 +47,7 @@ import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import PowerOutlinedIcon from '@mui/icons-material/PowerOutlined';
 import { useThemeIcon } from './theme-rail-icon';
 import { normalizeMath } from '@/app/utils/math-delimiters';
+import { unwrapReplyEnvelope } from '@/app/utils/reply-envelope';
 import { extractSkillDrafts, isSkillUpdate, retargetDraft, showSkillDrafts, type SkillDraftStatus } from '@/app/utils/skill-draft';
 
 import '@/app/styles/chat.css';
@@ -1434,7 +1435,7 @@ export default function Chat(props: {
                                   rehypePlugins={chatRehypePlugins}
                                   remarkPlugins={chatRemarkPlugins}
                                   plugins={{ code, mermaid, math, cjk }}>
-                                  {normalizeMath(showSkillDrafts(msg.content || '', (name) =>
+                                  {normalizeMath(showSkillDrafts(unwrapReplyEnvelope(msg.content || ''), (name) =>
                                     skillDraftStatus[`${msg.id}:${name}`]
                                     // The render between the turn ending and the effect above
                                     // starting its create: still writing, not yet saved.
@@ -1579,7 +1580,7 @@ export default function Chat(props: {
                           {msg.content && !msg.is_new && (
                             <div className="flex items-center gap-1 mt-2 px-1">
                               <CopyToClipboard
-                                text={showSkillDrafts(msg.content)}
+                                text={showSkillDrafts(unwrapReplyEnvelope(msg.content))}
                                 onCopy={() => {
                                   setCopied(msg.id);
                                   setTimeout(() => setCopied(""), 1500);
