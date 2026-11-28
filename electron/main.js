@@ -2495,7 +2495,7 @@ const DEFAULT_MODEL_DOWNLOAD_MB = 800;
 
 /**
  * A window to hang the sheet on, or null for a free-standing alert. Only the
- * main window qualifies: the splash is a 400x340 frameless transparent panel,
+ * main window qualifies: the splash is a 400x310 frameless transparent panel,
  * and a sheet dropped onto that reads as a dialog with no owner anyway — a
  * centered app-modal alert is clearer during startup.
  */
