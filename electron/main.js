@@ -1931,8 +1931,10 @@ const SPLASH_FINISH_MS = 500;
  *   index    — the current step in SPLASH_STEPS
  *   fraction — how far through that step, 0..1, or null when it can't be measured
  *   percent  — the one bar: overall progress across all steps, never moving back
+ *   message  — detail the step list can't give (a download's size); empty when
+ *              there is none, since the list already names the step
  */
-const splashState = { index: 0, fraction: null, percent: 0, message: 'Starting…', error: null };
+const splashState = { index: 0, fraction: null, percent: 0, message: '', error: null };
 
 function pushSplashState() {
   if (!splashWindow || splashWindow.isDestroyed()) return;
@@ -1943,6 +1945,7 @@ function pushSplashState() {
     busy: splashState.fraction === null,
     message: splashState.message,
     error: splashState.error,
+    version: app.getVersion(),
   });
   splashWindow.webContents
     .executeJavaScript(`window.renderSplash && window.renderSplash(${payload});`)
@@ -1973,7 +1976,7 @@ function setSplashState(patch) {
 function setSplashStep(id, message) {
   const index = SPLASH_STEPS.findIndex((step) => step.id === id);
   if (index < 0 || index < splashState.index) return;
-  setSplashState({ index, fraction: null, message: message || `${SPLASH_STEPS[index].label}…` });
+  setSplashState({ index, fraction: null, message: message || '' });
 }
 
 /** Tick the last step and fill the bar, then give it a moment on screen. */
@@ -3966,7 +3969,7 @@ function createSplashWindow() {
 
   splashWindow = new BrowserWindow({
     width: 400,
-    height: 340,
+    height: 310,
     transparent: true,
     frame: false,
     resizable: false,

@@ -48,6 +48,7 @@
     .brand {
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 12px;
     }
 
@@ -95,15 +96,23 @@
 
     .tagline {
       color: var(--sl-text-disabled);
-      font-size: 11px;
+      font-size: 10px;
+    }
+
+    /* Progress: the steps, the status line and the bar read as one block,
+       pinned to the foot of the window under the brand. */
+    .progress {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 16px;
     }
 
     /* Steps: every stage of startup, in order, with the current one lit. */
     .steps {
-      flex: 1;
       display: flex;
       flex-direction: column;
-      justify-content: center;
       gap: 12px;
       margin: 0;
       padding: 0;
@@ -171,6 +180,13 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
+    }
+
+    .version {
+      align-self: flex-end;
+      font-size: 10px;
+      color: var(--sl-text-faint);
+      font-variant-numeric: tabular-nums;
     }
 
     .status-row {
@@ -257,15 +273,18 @@
       </div>
     </div>
 
-    <ol class="steps" id="steps"></ol>
+    <div class="progress">
+      <ol class="steps" id="steps"></ol>
 
-    <div class="splash-footer">
-      <div class="status-row">
-        <span class="status-text" id="status-text">Starting…</span>
-        <span class="status-percent" id="status-percent">0%</span>
-      </div>
-      <div class="progress-bar">
-        <div class="progress-fill busy" id="progress-fill"></div>
+      <div class="splash-footer">
+        <div class="status-row">
+          <span class="status-text" id="status-text"></span>
+          <span class="status-percent" id="status-percent">0%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill busy" id="progress-fill"></div>
+        </div>
+        <span class="version" id="version"></span>
       </div>
     </div>
   </div>
@@ -275,7 +294,15 @@
     // is handed. renderSplash is called with the whole state every time, so a
     // call that lands before or after any other leaves the same picture.
     //
-    //   { steps: [{ id, label }], index, percent, busy, message, error }
+    //   { steps: [{ id, label }], index, percent, busy, message, error, version }
+
+    // The status line is for what the step list can't say (a download's size,
+    // an error). A message that only repeats the current step's label is noise.
+    function sameText(a, b) {
+      var norm = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); };
+      return norm(a) === norm(b);
+    }
+
     window.renderSplash = function (state) {
       var list = document.getElementById('steps');
       if (list.children.length !== state.steps.length) {
@@ -301,11 +328,15 @@
       });
 
       var text = document.getElementById('status-text');
-      text.textContent = state.error || state.message || '';
+      var current = state.steps[state.index];
+      var detail = current && sameText(state.message, current.label) ? '' : state.message;
+      text.textContent = state.error || detail || '';
       text.className = 'status-text' + (state.error ? ' error' : '');
 
       var percent = Math.max(0, Math.min(100, Math.round(state.percent || 0)));
-      document.getElementById('status-percent').textContent = state.error ? '' : percent + '%';
+      var count = Math.min(state.index + 1, state.steps.length) + ' of ' + state.steps.length;
+      document.getElementById('status-percent').textContent = state.error ? '' : count + ' · ' + percent + '%';
+      document.getElementById('version').textContent = state.version ? 'v' + state.version : '';
 
       var fill = document.getElementById('progress-fill');
       fill.style.width = percent + '%';
