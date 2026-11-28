@@ -13,7 +13,7 @@ import { LogoMark } from '@/app/components/logo';
  *
  * The branded shape exists because a bare spinner filling a window is
  * anonymous — it could belong to anything, and these are precisely the moments
- * the user is handing over trust. The mark takes --sl-brand-mark and the dot
+ * the user is handing over trust. The mark takes --sl-brand-mark and its panes
  * --sl-brand-primary, so it re-tints with the theme rather than pinning the
  * screen to one palette.
  */

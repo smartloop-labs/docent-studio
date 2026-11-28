@@ -2,13 +2,13 @@
   "fill-specializations" : [
     {
       "value" : {
-        "automatic-gradient" : "extended-srgb:0.00000,0.47843,1.00000,1.00000"
+        "automatic-gradient" : "extended-gray:1.00000,1.00000"
       }
     },
     {
       "appearance" : "dark",
       "value" : {
-        "automatic-gradient" : "extended-gray:0.00000,1.00000"
+        "automatic-gradient" : "extended-gray:1.00000,1.00000"
       }
     }
   ],
@@ -16,8 +16,8 @@
     {
       "layers" : [
         {
-          "image-name" : "257 (2).png",
-          "name" : "257 (2)"
+          "image-name" : "mark.png",
+          "name" : "mark"
         }
       ],
       "shadow" : {
