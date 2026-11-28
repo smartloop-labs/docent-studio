@@ -1,32 +1,37 @@
-// The Docent mark on its own — the app-icon glyph, no wordmark. Sizes from
-// the caller's className. Two-token fill, shared with the wordmark below: the
-// body takes `--sl-brand-mark` (the theme's primary text, so white on dark and
-// near-black on light) and the dot takes the theme's accent, which is what keeps
-// the glyph reading as two parts rather than one flat shape.
+// The Docent mark on its own — the app-icon glyph, no wordmark: the pixel
+// lantern from the Docent Studio tile on smartloop.ai, drawn on its 9x9 grid.
+// Sizes from the caller's className. Two-token fill, shared with the wordmark
+// below: the body takes `--sl-brand-mark` (the theme's primary text, so white
+// on dark and near-black on light) and the two panes take the theme's accent,
+// which is what keeps the glyph reading as a lit lantern rather than one flat
+// shape. `crispEdges` keeps the cells square at the small sizes it is used at.
+// The same grid lives in scripts/make-icons.py, which draws the app icons.
 export const LogoMark = ({ className = '' }: { className?: string }) => (
   <svg
-    viewBox="0 0 24 24"
+    viewBox="0 0 9 9"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     className={className}
+    shapeRendering="crispEdges"
     role="img"
     aria-label="Docent"
   >
     <path
-      d="M10 5H11A6 6 0 0 1 17 11V18H10A6 6 0 0 1 4 12V11A6 6 0 0 1 10 5Z"
+      d="M3 0h3v2h2v1h-1v5h1v1h-7v-1h1v-5h-1v-1h2zM4 1v1h1v-1zM3 4v3h1v-3zM5 4v3h1v-3z"
+      fillRule="evenodd"
       fill="var(--sl-brand-mark)"
     />
-    <circle cx="16.7" cy="8.4" r="3" fill="var(--sl-brand-primary)" />
+    <path d="M3 4h1v3h-1zM5 4h1v3h-1z" fill="var(--sl-brand-primary)" />
   </svg>
 );
 
-// The Docent wordmark — "docent" in the theme's primary text with a subscript
-// "(studio)" in the accent, matching the sidebar and splash wordmarks. Sizes from the caller's
+// The Docent wordmark — "docent" in the theme's primary text and "studio" beside
+// it at the same size in the accent, matching the sidebar and splash wordmarks. Sizes from the caller's
 // className (the viewBox does the scaling), and takes its fill from the theme
 // rather than a baked-in white — see `--sl-brand-mark` in themes.ts.
 export const Logo = ({ className = '' }: { className?: string }) => (
   <svg
-    viewBox="0 0 160 33"
+    viewBox="0 0 196 33"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     className={className}
@@ -43,9 +48,7 @@ export const Logo = ({ className = '' }: { className?: string }) => (
       fill="var(--sl-brand-mark)"
     >
       docent
-      <tspan dx="3" dy="5" fontSize="14" letterSpacing="0.3" fill="var(--sl-brand-primary)">
-        (studio)
-      </tspan>
+      <tspan dx="7" fill="var(--sl-brand-primary)">studio</tspan>
     </text>
   </svg>
 );

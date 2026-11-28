@@ -2,6 +2,7 @@
 <html>
 
 <head>
+  <meta charset="utf-8">
   <style>
     :root {
       --sl-bg-base: #000000;
@@ -14,6 +15,7 @@
       --sl-text-disabled: #6b7280;
       --sl-text-faint: #4b5563;
       --sl-border-default: #2a2a2a;
+      --splash-error: rgb(248, 113, 113);
     }
 
     body {
@@ -25,6 +27,8 @@
       justify-content: center;
       height: 100vh;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      user-select: none;
+      -webkit-app-region: drag;
     }
 
     .splash-container {
@@ -36,204 +40,310 @@
       flex-direction: column;
       box-sizing: border-box;
       overflow: hidden;
-      padding: 16px;
-      gap: 16px;
+      padding: 24px;
+      gap: 20px;
     }
 
-    .splash-card {
-      flex: 1;
-      background: var(--sl-bg-base);
-      border-radius: 12px;
+    /* Brand: the app-icon tile beside the wordmark. */
+    .brand {
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 28px 24px 20px;
-      position: relative;
+      gap: 12px;
     }
 
+    .brand-tile {
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      border-radius: 10px;
+      border: 1px solid rgba(10, 10, 20, 0.1);
+      background: linear-gradient(180deg, #ffffff, #f0f0f3);
+    }
+
+    .brand-tile svg {
+      width: 26px;
+      height: 26px;
+    }
+
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
 
     .logo {
-      font-size: 26px;
-      font-weight: bold;
-      text-align: center;
-      margin-bottom: 20px;
+      display: flex;
+      gap: 6px;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
     }
 
     .logo-text {
       color: var(--sl-text-primary);
     }
 
-    .logo-sub {
+    .logo-studio {
       color: var(--sl-brand-primary);
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-      margin-left: 3px;
-      position: relative;
-      top: 4px;
     }
 
-    .card-content {
-      width: 100%;
-      position: relative;
-      height: 80px;
+    .tagline {
+      color: var(--sl-text-disabled);
+      font-size: 10px;
     }
 
-    .card-slide {
-      position: absolute;
-      inset: 0;
+    /* Progress: the steps, the status line and the bar read as one block,
+       pinned to the foot of the window under the brand. */
+    .progress {
+      flex: 1;
       display: flex;
       flex-direction: column;
+      justify-content: flex-end;
+      gap: 16px;
+    }
+
+    /* Steps: every stage of startup, in order, with the current one lit. */
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .step {
+      display: flex;
       align-items: center;
-      text-align: center;
-      gap: 8px;
-      opacity: 0;
-      transition: opacity 0.5s ease;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--sl-text-faint);
+      transition: color 0.3s ease;
     }
 
-    .card-slide.active {
-      opacity: 1;
+    .step.done {
+      color: var(--sl-text-disabled);
     }
 
-    .card-icon {
-      width: 20px;
-      height: 20px;
-      flex-shrink: 0;
-    }
-
-    .card-icon svg {
-      width: 20px;
-      height: 20px;
-    }
-
-    .card-title {
+    .step.active {
       color: var(--sl-text-secondary);
-      font-size: 13px;
       font-weight: 600;
     }
 
-    .card-desc {
-      color: var(--sl-text-disabled);
-      font-size: 11px;
-      line-height: 1.6;
-      max-width: 280px;
+    .step.failed {
+      color: var(--splash-error);
+      font-weight: 600;
     }
 
-    .dots {
-      display: flex;
-      gap: 6px;
-      justify-content: center;
-      margin-top: 16px;
+    /* A square per step, in the lantern's pixel style: outlined while waiting,
+       pulsing while running, filled once done. */
+    .step-mark {
+      width: 10px;
+      height: 10px;
+      flex-shrink: 0;
+      box-sizing: border-box;
+      border-radius: 2px;
+      border: 1.5px solid var(--sl-bg-surface-3);
+      transition: background 0.3s ease, border-color 0.3s ease;
     }
 
-    .dot {
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: var(--sl-bg-surface-3);
-      transition: background 0.3s ease;
-    }
-
-    .dot.active {
+    .step.done .step-mark {
+      border-color: var(--sl-brand-primary);
       background: var(--sl-brand-primary);
     }
 
+    .step.active .step-mark {
+      border-color: var(--sl-brand-primary);
+      background: var(--sl-brand-primary);
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    .step.failed .step-mark {
+      border-color: var(--splash-error);
+      background: var(--splash-error);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.25; }
+    }
+
+    /* One progress bar for the whole of startup. */
     .splash-footer {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      padding: 0 8px 4px;
+    }
+
+    .version {
+      align-self: flex-end;
+      font-size: 10px;
+      color: var(--sl-text-faint);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 11px;
+      color: var(--sl-text-disabled);
     }
 
     .status-text {
-      color: var(--sl-text-disabled);
-      font-size: 11px;
-      text-align: center;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .status-text.error {
+      color: var(--splash-error);
+      font-weight: 600;
+      white-space: normal;
+    }
+
+    .status-percent {
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
     }
 
     .progress-bar {
       width: 100%;
-      height: 3px;
+      height: 4px;
       background: var(--sl-bg-surface-2);
       border-radius: 2px;
       overflow: hidden;
-      position: relative;
     }
 
     .progress-fill {
       height: 100%;
+      width: 0%;
       background: var(--sl-brand-primary);
       border-radius: 2px;
-      width: 0%;
-      transition: width 0.3s ease;
+      position: relative;
+      overflow: hidden;
+      transition: width 0.4s ease;
     }
 
-    .progress-fill.indeterminate {
-      width: 40% !important;
-      animation: slide 1.5s ease-in-out infinite;
+    /* A step with no measurable progress keeps the bar alive with a sheen
+       instead of pretending to a percentage. */
+    .progress-fill.busy::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+      animation: sheen 1.4s ease-in-out infinite;
     }
 
-    @keyframes slide {
+    .progress-fill.error {
+      background: var(--splash-error);
+    }
+
+    @keyframes sheen {
       0% { transform: translateX(-100%); }
-      100% { transform: translateX(350%); }
+      100% { transform: translateX(100%); }
     }
   </style>
 </head>
 
 <body>
   <div class="splash-container">
-    <div class="splash-card">
-      <div class="logo">
-        <span class="logo-text">docent</span><span class="logo-sub">(studio)</span>
+    <div class="brand">
+      <div class="brand-tile">
+        <svg viewBox="0 0 9 9" shape-rendering="crispEdges" aria-hidden="true">
+          <path fill="#0a0a0f" d="M3 0h3v2h2v1h-1v5h1v1h-7v-1h1v-5h-1v-1h2zM4 1v1h1v-1z" fill-rule="evenodd" />
+          <path fill="#ec4899" d="M3 4h1v3h-1zM5 4h1v3h-1z" />
+        </svg>
       </div>
-
-      <div class="card-content">
-        <div class="card-slide active" data-step="0">
-          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="var(--sl-brand-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
-          <div class="card-title">Mission Control</div>
-          <div class="card-desc">Your AI mission control that runs 100% on your machine — private, fast, and always available.</div>
+      <div class="brand-text">
+        <div class="logo">
+          <span class="logo-text">docent</span><span class="logo-studio">studio</span>
         </div>
-        <div class="card-slide" data-step="1">
-          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="var(--sl-brand-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>
-          <div class="card-title">Extract Information</div>
-          <div class="card-desc">Upload documents and extract information across all of them at once.</div>
-        </div>
-        <div class="card-slide" data-step="2">
-          <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="var(--sl-brand-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div>
-          <div class="card-title">Generate New Content</div>
-          <div class="card-desc">Use skills to get the most out of your local models.</div>
-        </div>
+        <div class="tagline">Your private AI assistant: documents, systems, skills</div>
       </div>
-
-      <div class="dots">
-        <div class="dot active" data-dot="0"></div>
-        <div class="dot" data-dot="1"></div>
-        <div class="dot" data-dot="2"></div>
-      </div>
-
     </div>
 
-    <div class="splash-footer">
-      <div class="status-text" id="status-text">Heating things up...</div>
-      <div class="progress-bar">
-        <div class="progress-fill indeterminate" id="progress-fill"></div>
+    <div class="progress">
+      <ol class="steps" id="steps"></ol>
+
+      <div class="splash-footer">
+        <div class="status-row">
+          <span class="status-text" id="status-text"></span>
+          <span class="status-percent" id="status-percent">0%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill busy" id="progress-fill"></div>
+        </div>
+        <span class="version" id="version"></span>
       </div>
     </div>
   </div>
 
   <script>
-    let current = 0;
-    const slides = document.querySelectorAll('.card-slide');
-    const dots = document.querySelectorAll('.dot');
+    // The main process owns startup and its state; this page only draws what it
+    // is handed. renderSplash is called with the whole state every time, so a
+    // call that lands before or after any other leaves the same picture.
+    //
+    //   { steps: [{ id, label }], index, percent, busy, message, error, version }
 
-    setInterval(function () {
-      slides[current].classList.remove('active');
-      dots[current].classList.remove('active');
-      current = (current + 1) % 3;
-      slides[current].classList.add('active');
-      dots[current].classList.add('active');
-    }, 3000);
+    // The status line is for what the step list can't say (a download's size,
+    // an error). A message that only repeats the current step's label is noise.
+    function sameText(a, b) {
+      var norm = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); };
+      return norm(a) === norm(b);
+    }
+
+    window.renderSplash = function (state) {
+      var list = document.getElementById('steps');
+      if (list.children.length !== state.steps.length) {
+        list.innerHTML = '';
+        state.steps.forEach(function (step) {
+          var li = document.createElement('li');
+          li.className = 'step';
+          var mark = document.createElement('span');
+          mark.className = 'step-mark';
+          var label = document.createElement('span');
+          label.textContent = step.label;
+          li.appendChild(mark);
+          li.appendChild(label);
+          list.appendChild(li);
+        });
+      }
+
+      Array.prototype.forEach.call(list.children, function (li, i) {
+        var status = '';
+        if (i < state.index) status = 'done';
+        else if (i === state.index) status = state.error ? 'failed' : 'active';
+        li.className = 'step' + (status ? ' ' + status : '');
+      });
+
+      var text = document.getElementById('status-text');
+      var current = state.steps[state.index];
+      var detail = current && sameText(state.message, current.label) ? '' : state.message;
+      text.textContent = state.error || detail || '';
+      text.className = 'status-text' + (state.error ? ' error' : '');
+
+      var percent = Math.max(0, Math.min(100, Math.round(state.percent || 0)));
+      var count = Math.min(state.index + 1, state.steps.length) + ' of ' + state.steps.length;
+      document.getElementById('status-percent').textContent = state.error ? '' : count + ' · ' + percent + '%';
+      document.getElementById('version').textContent = state.version ? 'v' + state.version : '';
+
+      var fill = document.getElementById('progress-fill');
+      fill.style.width = percent + '%';
+      fill.className = 'progress-fill'
+        + (state.error ? ' error' : '')
+        + (state.busy && !state.error ? ' busy' : '');
+    };
   </script>
 </body>
 

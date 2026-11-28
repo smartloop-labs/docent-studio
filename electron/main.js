@@ -1215,36 +1215,6 @@ ipcMain.handle('projects-update', async (event, projectId, updates) => {
   }
 });
 
-// PATCH web_search_enabled on every project — the app-wide switch in Settings.
-// Web search is a per-project backend flag, so "off" means off in each one;
-// a single broadcast afterwards so the renderer refetches once, not per project.
-ipcMain.handle('projects-set-web-search', async (event, enabled) => {
-  try {
-    const baseUrl = slpService.getLocalBaseUrl();
-    if (!baseUrl) return { success: false, error: 'Local API service is not ready' };
-
-    const res = await fetch(`${baseUrl}/v1/projects`);
-    if (!res.ok) return { success: false, error: 'Failed to list projects' };
-    const data = await res.json();
-    const projects = Array.isArray(data) ? data : (Array.isArray(data?.projects) ? data.projects : []);
-
-    const results = await Promise.all(projects.map((p) =>
-      fetch(`${baseUrl}/v1/projects/${p.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ web_search_enabled: !!enabled }),
-      }).then((r) => r.ok).catch(() => false)
-    ));
-
-    broadcastProjectsChanged();
-    const failed = results.filter((ok) => !ok).length;
-    return failed ? { success: false, error: `Failed to update ${failed} project(s)` } : { success: true };
-  } catch (err) {
-    console.error('[Projects] Error setting web search:', err.message);
-    return { success: false, error: err.message || 'An error occurred while updating web search' };
-  }
-});
-
 // DELETE /v1/projects/{id}, cascading local SQLite cleanup. Atomic, off-renderer.
 ipcMain.handle('projects-delete', async (event, projectId) => {
   try {
@@ -1935,8 +1905,90 @@ async function bootstrapSlpService(baseUrl, onProgress) {
 }
 
 /**
- * Update the splash screen with download/install progress.
- * Single progress bar with status text.
+ * The stages of startup, in the order the splash lists them. Every launch walks
+ * all of them: a stage with nothing to do (no install needed, a service already
+ * running) is passed straight through and shows as done, so the list reads the
+ * same on a first run and on the hundredth.
+ */
+const SPLASH_STEPS = [
+  { id: 'components', label: 'Checking components' },
+  { id: 'service', label: 'Starting the agent' },
+  { id: 'model', label: 'Preparing the model' },
+  { id: 'workspace', label: 'Setting up your workspace' },
+  { id: 'launch', label: 'Opening Docent Studio' },
+];
+
+// How long the finished splash stays up before the main window replaces it —
+// long enough to see the last step tick, short enough not to read as a wait.
+const SPLASH_FINISH_MS = 500;
+
+/**
+ * Everything the splash shows. It lives here rather than in the page so there
+ * is one owner: the page is redrawn from the whole of it on every change (and
+ * once more when it finishes loading), which is what keeps a splash raised
+ * mid-startup from coming up blank or a step behind.
+ *
+ *   index    — the current step in SPLASH_STEPS
+ *   fraction — how far through that step, 0..1, or null when it can't be measured
+ *   percent  — the one bar: overall progress across all steps, never moving back
+ *   message  — detail the step list can't give (a download's size); empty when
+ *              there is none, since the list already names the step
+ */
+const splashState = { index: 0, fraction: null, percent: 0, message: '', error: null };
+
+function pushSplashState() {
+  if (!splashWindow || splashWindow.isDestroyed()) return;
+  const payload = JSON.stringify({
+    steps: SPLASH_STEPS,
+    index: splashState.index,
+    percent: splashState.percent,
+    busy: splashState.fraction === null,
+    message: splashState.message,
+    error: splashState.error,
+    version: app.getVersion(),
+  });
+  splashWindow.webContents
+    .executeJavaScript(`window.renderSplash && window.renderSplash(${payload});`)
+    .catch(() => { });
+}
+
+function setSplashState(patch) {
+  Object.assign(splashState, { error: null }, patch);
+
+  // The last step is arrival, so reaching it is 100%; the steps before it share
+  // the bar equally. Held at its high-water mark: a step that runs two measured
+  // jobs back to back (a template download, then the model's) would otherwise
+  // drag the bar backwards when the second starts from zero.
+  const working = SPLASH_STEPS.length - 1;
+  const overall = splashState.index >= working
+    ? 100
+    : ((splashState.index + (splashState.fraction || 0)) / working) * 100;
+  splashState.percent = Math.max(splashState.percent, Math.min(100, overall));
+
+  pushSplashState();
+}
+
+/**
+ * Move the splash to a step, marking everything before it done. Never moves
+ * back: the repair path restarts the service from inside the workspace step,
+ * and the list should not un-tick what the user already watched finish.
+ */
+function setSplashStep(id, message) {
+  const index = SPLASH_STEPS.findIndex((step) => step.id === id);
+  if (index < 0 || index < splashState.index) return;
+  setSplashState({ index, fraction: null, message: message || '' });
+}
+
+/** Tick the last step and fill the bar, then give it a moment on screen. */
+async function finishSplash() {
+  if (!splashWindow || splashWindow.isDestroyed()) return;
+  setSplashStep('launch');
+  await new Promise((resolve) => setTimeout(resolve, SPLASH_FINISH_MS));
+}
+
+/**
+ * Report progress within the current splash step: the status line under the
+ * step list, and how far through the step the bar should sit.
  *
  * @param {object} data - Progress data:
  *   { status: 'downloading', downloaded: number, total: number }
@@ -1948,15 +2000,7 @@ function updateSplashProgress(data) {
   if (!splashWindow || splashWindow.isDestroyed()) return;
 
   if (data.status === 'error') {
-    const msg = data.message || 'An error occurred.';
-    splashWindow.webContents.executeJavaScript(`
-      var st = document.getElementById('status-text');
-      st.textContent = ${JSON.stringify(msg)};
-      st.style.color = 'rgb(248,113,113)';
-      st.style.fontWeight = '600';
-      document.getElementById('progress-fill').style.width = '0%';
-      document.getElementById('progress-fill').classList.remove('indeterminate');
-    `).catch(() => { });
+    setSplashState({ error: data.message || 'An error occurred.' });
     return;
   }
 
@@ -1980,45 +2024,26 @@ function updateSplashProgress(data) {
       statusText = label;
     }
 
-    splashWindow.webContents.executeJavaScript(`
-      document.getElementById('status-text').textContent = ${JSON.stringify(statusText)};
-      document.getElementById('progress-fill').style.width = '${pct}%';
-      document.getElementById('progress-fill').classList.remove('indeterminate');
-    `).catch(() => { });
+    setSplashState({ message: statusText, fraction: pct > 0 ? pct / 100 : null });
     return;
   }
 
   if (data.status === 'installing') {
-    const msg = data.message || 'Installing...';
-    // When a deterministic percent is provided (e.g. archive extraction),
-    // drive the bar fill; otherwise fall back to the indeterminate animation.
+    // When a deterministic percent is provided (e.g. archive extraction), it
+    // drives the bar through this step; otherwise the bar holds and shimmers.
     const hasPct = data.percent !== undefined && data.percent !== null;
     const pct = hasPct ? Math.min(100, Math.max(0, Math.round(Number(data.percent)))) : 0;
-    splashWindow.webContents.executeJavaScript(`
-      document.getElementById('status-text').textContent = ${JSON.stringify(msg)};
-      document.getElementById('progress-fill').style.width = '${pct}%';
-      document.getElementById('progress-fill').classList.${hasPct ? 'remove' : 'add'}('indeterminate');
-    `).catch(() => { });
+    setSplashState({ message: data.message || 'Installing...', fraction: hasPct ? pct / 100 : null });
     return;
   }
 
   if (data.status === 'preparing') {
-    const msg = data.message || 'Starting agent. This might take a while...';
-    splashWindow.webContents.executeJavaScript(`
-      document.getElementById('status-text').textContent = ${JSON.stringify(msg)};
-      document.getElementById('progress-fill').style.width = '0%';
-      document.getElementById('progress-fill').classList.add('indeterminate');
-    `).catch(() => { });
+    setSplashState({ message: data.message || 'Starting agent. This might take a while...', fraction: null });
     return;
   }
 
   if (data.status === 'verifying') {
-    const msg = data.message || 'Verifying system requirements…';
-    splashWindow.webContents.executeJavaScript(`
-      document.getElementById('status-text').textContent = ${JSON.stringify(msg)};
-      document.getElementById('progress-fill').style.width = '0%';
-      document.getElementById('progress-fill').classList.add('indeterminate');
-    `).catch(() => { });
+    setSplashState({ message: data.message || 'Verifying system requirements…', fraction: null });
     return;
   }
 
@@ -2470,7 +2495,7 @@ const DEFAULT_MODEL_DOWNLOAD_MB = 800;
 
 /**
  * A window to hang the sheet on, or null for a free-standing alert. Only the
- * main window qualifies: the splash is a 400x340 frameless transparent panel,
+ * main window qualifies: the splash is a 400x310 frameless transparent panel,
  * and a sheet dropped onto that reads as a dialog with no owner anyway — a
  * centered app-modal alert is clearer during startup.
  */
@@ -3944,7 +3969,7 @@ function createSplashWindow() {
 
   splashWindow = new BrowserWindow({
     width: 400,
-    height: 340,
+    height: 310,
     transparent: true,
     frame: false,
     resizable: false,
@@ -3956,7 +3981,10 @@ function createSplashWindow() {
   });
 
   splashWindow.loadFile(path.join(__dirname, 'splash-starting.html'));
-  splashWindow.webContents.on('did-finish-load', applySplashTheme);
+  splashWindow.webContents.on('did-finish-load', () => {
+    applySplashTheme();
+    pushSplashState();
+  });
   return splashWindow;
 }
 
@@ -4511,8 +4539,10 @@ if (!gotTheLock) {
 
       // Same as the install path: a healthy service can still have an empty
       // workspace, and this is what keeps that from becoming a download.
+      setSplashStep('model');
       await ensureBootstrapModel(baseUrl, (progress) => updateSplashProgress(progress));
 
+      setSplashStep('workspace');
       const needsBootstrap = await checkNeedsBootstrap(baseUrl);
 
       // Download blank project template in the background
@@ -4525,6 +4555,7 @@ if (!gotTheLock) {
         baseUrl = await bootstrapOnSplash(baseUrl);
       }
 
+      await finishSplash();
       revealMainWindow(baseUrl);
     } else {
       // Either nothing is running, or something is running that we refused to
@@ -4602,7 +4633,7 @@ if (!gotTheLock) {
           }
 
           // Step 2: Start the service (owned by this main process).
-          updateSplashProgress({ status: 'preparing', message: 'Starting agent. This might take a while...' });
+          setSplashStep('service', 'Starting agent. This might take a while...');
 
           const serviceStarted = await slpService.startService();
           if (!serviceStarted) {
@@ -4617,8 +4648,10 @@ if (!gotTheLock) {
           // Get the models into the workspace before bootstrap looks for them,
           // so bootstrap reports the model ready instead of downloading 770 MB
           // and document search works offline from the first index.
+          setSplashStep('model');
           await ensureBootstrapModel(baseUrl, (progress) => updateSplashProgress(progress));
 
+          setSplashStep('workspace');
           const needsBootstrap = await checkNeedsBootstrap(baseUrl);
 
           // Download blank project template while splash is still visible
@@ -4632,6 +4665,7 @@ if (!gotTheLock) {
             baseUrl = await bootstrapOnSplash(baseUrl);
           }
 
+          await finishSplash();
           revealMainWindow(baseUrl);
         } catch (error) {
           console.error('[SLP] Service start failed:', error.message);

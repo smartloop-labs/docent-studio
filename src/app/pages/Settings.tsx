@@ -6,7 +6,6 @@ import { useThemeContext } from '@/app/contexts/ThemeContext';
 import { storageService } from '@/app/services/storage.service';
 import { BOOTSTRAP_MODEL } from '@/app/constants';
 import { useAppStatus } from '@/app/contexts/AppStatusContext';
-import { useProjectContext } from '@/app/contexts/ProjectContext';
 import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import SpeedIcon from '@mui/icons-material/Speed';
@@ -277,9 +276,7 @@ export default function SettingsPage() {
     // Web search is a per-project backend flag; this switch sets it on every
     // project at once. Shown on while any project still has it on (undefined
     // reads as ON, the backend default), so "off" here means off everywhere.
-    // The hosted search endpoint needs a Smartloop token, so it's disabled
-    // while signed out (useAuth stands in a { guest: true } placeholder).
-    const { projects } = useProjectContext();
+    // Signed out is not a null user: useAuth stands in a { guest: true } placeholder.
     const isSignedIn = !!user && !user.guest;
 
     // Account deletion (guideline 5.1.1(v)). The dialog does the delete; on
@@ -291,18 +288,6 @@ export default function SettingsPage() {
         setUser({ name: 'Local', guest: true, conversations: [] });
         window.dispatchEvent(new CustomEvent('authStateChanged', { detail: { loggedIn: false } }));
     };
-    const webSearchOn = projects.some((p: any) => p.web_search_enabled !== false);
-    const [webSearchSaving, setWebSearchSaving] = useState(false);
-    const handleWebSearchToggle = async (enabled: boolean) => {
-        setWebSearchSaving(true);
-        try {
-            const res = await (window as any).electronAPI?.projects?.setWebSearch(enabled);
-            if (!res?.success) console.error('[Settings] Failed to set web search:', res?.error);
-        } finally {
-            setWebSearchSaving(false);
-        }
-    };
-
     // Settings state
     const [settings, setSettings] = useState<GlobalSettings>(DEFAULT_SETTINGS);
     const [isSaving, setIsSaving] = useState(false);
@@ -989,31 +974,22 @@ export default function SettingsPage() {
                         );
                     })()}
 
-                    {/* Web search — app-wide, applied to every project */}
+                    {/* Web search — no switch: the assistant is always offered the
+                        search tool and decides for itself when a question needs it.
+                        What stays here is what a search sends and what it costs. */}
                     <Box className="mb-6 md:mb-8 p-4 md:p-6 rounded-xl" sx={{ bgcolor: 'var(--sl-bg-surface-1)', border: '1px solid var(--sl-border-default)' }}>
                         <Box className="flex items-center gap-2 mb-4 md:mb-6">
                             <TravelExploreIcon sx={{ color: 'var(--sl-brand-primary)', fontSize: { xs: 20, md: 24 } }} />
                             <h2 className="text-lg md:text-xl font-semibold" style={{ color: 'var(--sl-text-primary)' }}>Web search</h2>
                         </Box>
 
-                        <Box className="flex items-center justify-between gap-4 p-4" sx={{ bgcolor: 'var(--sl-white-alpha-5)', borderRadius: '12px', border: '1px solid var(--sl-border-subtle)', opacity: isSignedIn ? 1 : 0.5 }}>
-                            <Box>
-                                <h3 className="text-sm font-medium mb-1" style={{ color: 'var(--sl-text-primary)' }}>Enable web search</h3>
-                                <p className="text-xs" style={{ color: 'var(--sl-text-disabled)' }}>
-                                    {isSignedIn
-                                        ? 'Let answers reach current information from the web, with sources cited. Applies to all projects.'
-                                        : 'Log in to use web search.'}
-                                </p>
-                            </Box>
-                            <Switch
-                                checked={isSignedIn && webSearchOn}
-                                disabled={!isSignedIn || webSearchSaving || projects.length === 0}
-                                onChange={(e) => handleWebSearchToggle(e.target.checked)}
-                                sx={{
-                                    '& .MuiSwitch-switchBase.Mui-checked': { color: 'var(--sl-brand-primary)' },
-                                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: 'var(--sl-brand-primary)' },
-                                }}
-                            />
+                        <Box className="p-4" sx={{ bgcolor: 'var(--sl-white-alpha-5)', borderRadius: '12px', border: '1px solid var(--sl-border-subtle)' }}>
+                            <h3 className="text-sm font-medium mb-1" style={{ color: 'var(--sl-text-primary)' }}>Searches when a question needs it</h3>
+                            <p className="text-xs" style={{ color: 'var(--sl-text-disabled)' }}>
+                                {isSignedIn
+                                    ? 'The assistant decides when to look something up on the web, such as current events or a latest version, and cites the pages it used.'
+                                    : 'The assistant decides when to look something up on the web. Log in to use web search.'}
+                            </p>
                         </Box>
 
                         <p className="text-xs mt-3 px-1 leading-relaxed" style={{ color: 'var(--sl-text-faint)' }}>

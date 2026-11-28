@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, CircularProgress, InputAdornment, Switch, TextField } from '@mui/material';
+import { Box, CircularProgress, InputAdornment, TextField } from '@mui/material';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 // Mirrors the FileDownloadIcon on the new-project dialog's Import card:
 // arrow out for export, arrow in for import.
@@ -26,12 +26,6 @@ interface ProjectSettingsPanelProps {
   onRenameProject?: (name: string) => void;
   onColorChange?: (color: string) => void;
   onEditInstructions: () => void;
-  /**
-   * Flips the project's `web_search_enabled` flag. The chat status strip
-   * mirrors it as an on/off pill; an absent handler means the toggle renders read-only
-   * rather than pretending to save.
-   */
-  onWebSearchChange?: (enabled: boolean) => void;
 }
 
 export default function ProjectSettingsPanel({
@@ -42,7 +36,6 @@ export default function ProjectSettingsPanel({
   onRenameProject,
   onColorChange,
   onEditInstructions,
-  onWebSearchChange,
 }: ProjectSettingsPanelProps) {
   // System projects (e.g. General) have a fixed name — the field is read-only.
   const isSystemProject = project?.system === true;
@@ -56,13 +49,6 @@ export default function ProjectSettingsPanel({
   const isSignedIn = !!user && !user.guest;
   const canExport = isSignedIn;
   const exportBlocked = exporting || !canExport;
-
-  // Web search is a backend project flag. Undefined reads as ON — projects
-  // created before the flag existed behave as the backend does for them.
-  const webSearchOn = projectData?.web_search_enabled !== false;
-  // The hosted search endpoint needs a Smartloop token, so signed out the
-  // switch is disabled (as are the chat footer toggle and the hotkey).
-  const webSearchBlocked = !isSignedIn || !onWebSearchChange;
 
   // Follow the selected project, so the field never shows the last one's name.
   useEffect(() => {
@@ -204,45 +190,6 @@ export default function ProjectSettingsPanel({
         )}
       </div>
     </div>
-
-    {/* Web search — one boolean, so it gets one row and no section header: a
-        header plus a label plus a caption is three pieces of text explaining a
-        switch. Also flipped by the search pill in the chat status strip and the
-        Cmd/Ctrl+Alt+S hotkey (Home.tsx). */}
-    <Tooltip title={isSignedIn ? '' : 'Log in to use web search'} placement="top" arrow>
-    <div>
-      <Box
-        className="flex items-center justify-between gap-2"
-        sx={{
-          padding: '4px 8px 4px 12px',
-          borderRadius: '6px',
-          backgroundColor: 'var(--sl-bg-surface-1)',
-          border: '1px solid var(--sl-border-default)',
-          opacity: webSearchBlocked ? 0.5 : 1,
-        }}
-      >
-        <Box className="flex items-center gap-2 min-w-0">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"
-            style={{ color: !webSearchBlocked && webSearchOn ? 'var(--sl-brand-primary)' : 'var(--sl-text-muted)' }}>
-            <circle cx="12" cy="12" r="9.5" />
-            <line x1="2.5" y1="12" x2="21.5" y2="12" />
-            <path d="M12 2.5a14.5 14.5 0 0 1 3.8 9.5 14.5 14.5 0 0 1-3.8 9.5 14.5 14.5 0 0 1-3.8-9.5A14.5 14.5 0 0 1 12 2.5z" />
-          </svg>
-          <span className="text-xs text-[var(--sl-text-primary)] truncate">Web search</span>
-        </Box>
-        <Switch
-          size="small"
-          checked={!webSearchBlocked && webSearchOn}
-          disabled={webSearchBlocked}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onWebSearchChange?.(e.target.checked)}
-          sx={{
-            '& .MuiSwitch-switchBase.Mui-checked': { color: 'var(--sl-brand-primary)' },
-            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: 'var(--sl-brand-primary)' },
-          }}
-        />
-      </Box>
-    </div>
-    </Tooltip>
 
     {/* Export Project — pairs with Import in the new-project dialog
         (sidebar.tsx), so it uses the same word for the same .zip. Not

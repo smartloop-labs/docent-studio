@@ -25,12 +25,10 @@ import ThumbDownIcon from '@mui/icons-material/ThumbDown';
 import SaveAltIcon from '@mui/icons-material/SaveAlt';
 import SearchIcon from '@mui/icons-material/Search';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
-import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import MessageInput from './message-input';
 import { LogoMark } from './logo';
 import ModelPicker from './model-picker';
-import WebSearchToggle from './web-search-toggle';
 
 import { getLocalApiEndpoint, BOOTSTRAP_MODEL } from '@/app/constants';
 import { useAppStatus } from '@/app/contexts/AppStatusContext';
@@ -1180,11 +1178,7 @@ export default function Chat(props: {
           // Left enabled while a model loads: reaching for the switcher is
           // exactly what you do when a load is dragging, so a slow warm
           // shouldn't trap the choice the user is trying to get out of.
-          // Web search sits beside it: both decide how the turn is answered.
-          <>
-            <WebSearchToggle project={props.project} disabled={!isServiceReady} />
-            <ModelPicker model={model} disabled={!isServiceReady} />
-          </>
+          <ModelPicker model={model} disabled={!isServiceReady} />
         }
       />
       <div className="flex items-center gap-1.5 px-1 mt-2 text-[10px] text-sl-text-faint leading-none">
@@ -1363,7 +1357,7 @@ export default function Chat(props: {
                         border: '1px solid var(--sl-brand-alpha-20)',
                       }}
                     >
-                      <LightbulbIcon sx={{ color: 'var(--sl-brand-primary)', fontSize: 24 }} />
+                      <LogoMark className="h-6 w-6" />
                     </Box>
                     <h2 className="text-lg md:text-xl font-semibold text-sl-text-primary">Tips to Get Started</h2>
                   </div>

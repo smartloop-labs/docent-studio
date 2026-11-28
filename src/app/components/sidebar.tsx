@@ -731,11 +731,11 @@ export default function Sidebar({ user, mobileOpen, onMobileClose, collapsed = f
             sx={{
               display: 'flex',
               alignItems: 'baseline',
-              gap: 0.5
+              gap: 0.75
             }}
           >
             <span className="text-xl font-semibold tracking-tight" style={{ color: 'var(--sl-text-primary)' }}>docent</span>
-            <span className="text-[11px] font-semibold tracking-wide translate-y-[3px]" style={{ color: 'var(--sl-brand-primary)' }}>(studio)</span>
+            <span className="text-xl font-semibold tracking-tight" style={{ color: 'var(--sl-brand-primary)' }}>studio</span>
           </Box>
           {onToggleCollapse && (
             <Tooltip title="Collapse sidebar (⌘\\)" placement="right" arrow>
