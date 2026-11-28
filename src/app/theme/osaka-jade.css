@@ -1,7 +1,7 @@
 /*
  * Osaka Jade theme — CRT scanline texture.
- * Palette + font live in the theme YAML (themes are data); this file holds only
- * the non-color, non-font cue (scanlines) scoped behind the `theme-osaka-jade`
+ * The palette lives in the theme YAML (themes are data), and the theme leaves
+ * the app's typeface alone; this file holds only the non-color cue (scanlines) scoped behind the `theme-osaka-jade`
  * root class toggled by ThemeContext.
  */
 
