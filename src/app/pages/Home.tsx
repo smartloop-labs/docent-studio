@@ -39,11 +39,6 @@ const mapSkills = (list: any[]) =>
 
 export default function Home() {
   const [user, setUser] = useAuthContext();
-  // Signed out is NOT a null user: useAuth stands in a guest placeholder
-  // ({ name: 'Local', guest: true }), so the guest flag is what decides.
-  // Web search runs through the hosted endpoint and needs a Smartloop token,
-  // so every web search control is disabled while signed out.
-  const isSignedIn = !!user && !user.guest;
   const {
     projects: projectsList,
     selectedProject,
@@ -430,20 +425,6 @@ export default function Home() {
 
     return () => { cancelled = true; };
   }, [selectedProject?.id]);
-
-  // Re-sync the per-project web-search flag whenever the project list refreshes.
-  // The loader above only re-runs on an id change, so without this a value that
-  // changed on the backend (or a project revisited after switching away) would
-  // keep showing whatever currentProjectData was last set to.
-  useEffect(() => {
-    const enabled = selectedProject?.web_search_enabled;
-    if (enabled === undefined) return;
-    setCurrentProjectData((prev: any) =>
-      prev && prev.id === selectedProject?.id && prev.web_search_enabled !== enabled
-        ? { ...prev, web_search_enabled: enabled }
-        : prev
-    );
-  }, [selectedProject?.id, selectedProject?.web_search_enabled]);
 
   // Refresh currentProjectData.documents when a document is uploaded or processing completes
   useEffect(() => {
@@ -843,29 +824,6 @@ export default function Home() {
     await storageService.updateProjectMeta(selectedProject.id, { instructions });
     setCurrentProjectData((prev: any) => prev ? { ...prev, instructions } : prev);
     await refreshProjects();
-  };
-
-  const handleWebSearchChange = async (enabled: boolean) => {
-    if (!selectedProject?.id) return;
-    // Web search is a project-level flag owned by the SLP backend; patch it
-    // through the API so the agent honors it on the next chat turn.
-    // Field name must match the API schema (`web_search_enabled`) — anything
-    // else is dropped by the PATCH and the toggle silently does nothing.
-    const result = await updateProjectCtx(selectedProject.id, { web_search_enabled: enabled });
-    if (result.success) {
-      setCurrentProjectData((prev: any) => prev ? { ...prev, web_search_enabled: enabled } : prev);
-    }
-  };
-
-  // Flip web search for the current project. Backs the Cmd/Ctrl+Alt+S shortcut;
-  // Project Settings calls handleWebSearchChange directly; undefined counts as ON, so the first press
-  // on a pre-flag project turns it off rather than re-enabling.
-  const toggleWebSearch = () => {
-    if (!selectedProject?.id) return;
-    // Inert while signed out, alongside the disabled footer toggle and
-    // Project Settings row.
-    if (!isSignedIn) return;
-    handleWebSearchChange(currentProjectData?.web_search_enabled === false);
   };
 
   const handleRenameProject = async (name: string) => {
@@ -1310,16 +1268,6 @@ description: A clear description of what this skill does and when to use it
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return;
 
-      // Cmd/Ctrl+Alt+S toggles web search for the current project. Alt rather
-      // than Shift because Cmd/Ctrl+Shift+S opens the Skills rail section — the
-      // Cmd/Ctrl+Shift family is reserved for panels (right-sidebar.tsx).
-      // Checked before the altKey bail-out below, which guards the rest.
-      if (e.code === 'KeyS' && e.altKey && !e.shiftKey) {
-        e.preventDefault();
-        toggleWebSearch();
-        return;
-      }
-
       if (e.altKey) return;
 
       // Matched on e.code so a non-QWERTY layout still triggers on the T key.
@@ -1376,7 +1324,7 @@ description: A clear description of what this skill does and when to use it
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [openTabs, activeTabId, selectedProject?.id, currentProjectData?.web_search_enabled, isSignedIn]);
+  }, [openTabs, activeTabId, selectedProject?.id]);
 
   // Put the caret in the composer. Chat owns the textarea, so reach it by name the
   // same way the quote-selection flow does (chat.tsx) instead of threading a ref
@@ -2040,7 +1988,6 @@ description: A clear description of what this skill does and when to use it
                     onColorChange={handleColorChange}
                     onRenameProject={handleRenameProject}
                     onInstructionsChange={handleInstructionsChange}
-                    onWebSearchChange={handleWebSearchChange}
                     user={user}
                     activeTab={getActiveTab()?.type || 'conversation'}
                     onTabChange={handleOpenTab}

@@ -5,11 +5,10 @@ import { dialogStyles } from '@/app/shared/utils';
 const IS_MAC = (window as any).electronAPI?.platform === 'darwin';
 const MOD = IS_MAC ? '⌘' : 'Ctrl';
 const SHIFT = IS_MAC ? '⇧' : 'Shift';
-const ALT = IS_MAC ? '⌥' : 'Alt';
 
 // Every binding the app registers, grouped the way the UI is laid out — by
 // where the control lives, so a binding is findable from what you can see on
-// screen. Handlers live in Home.tsx (tabs, conversations, web search),
+// screen. Handlers live in Home.tsx (tabs, conversations),
 // sidebar.tsx (search, settings), right-sidebar.tsx (panel sections) and
 // model-picker.tsx (models) — keep this list in step with them.
 const GROUPS: { title: string; items: { keys: string; label: string }[] }[] = [
@@ -27,12 +26,10 @@ const GROUPS: { title: string; items: { keys: string; label: string }[] }[] = [
   },
   {
     // Controls that live in the composer, not in a panel — the model dialog
-    // opens from the row under the prompt, and web search is the flag the
-    // agent answers under.
+    // opens from the row under the prompt.
     title: 'Composer',
     items: [
       { keys: `${MOD}+${SHIFT}+M`, label: 'Models' },
-      { keys: `${MOD}+${ALT}+S`, label: 'Toggle web search' },
     ],
   },
   {
